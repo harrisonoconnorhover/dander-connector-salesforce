@@ -19,6 +19,7 @@ Declare `dander-connector-salesforce==0.1.0rc1` under `plugins.salesforce` in `d
 - Dependency audit reported no known vulnerabilities.
 - Wheel and sdist built; both contain the adapter and connector template.
 - Outside-checkout wheel installation and entry-point discovery passed.
+- Protected PR checks passed for Python, distribution, and secret validation.
 
 ## Decisions
 
@@ -28,7 +29,6 @@ Declare `dander-connector-salesforce==0.1.0rc1` under `plugins.salesforce` in `d
 
 ## Remaining
 
-- Push the focused PR and let protected CI repeat Linux validation.
 - Configure the new package's PyPI trusted publisher only after publication approval.
 - Publish candidates only after explicit approval.
 - Run the isolated live proof only against published candidates.
