@@ -1,0 +1,73 @@
+[project]
+name = "dander-connector-salesforce"
+version = "0.1.0rc1"
+description = "Salesforce Bulk API 2.0 connector plugin for Dander."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Harrison O'Connor-Hover" }]
+keywords = ["dander", "salesforce", "bulk-api", "etl"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Database",
+]
+dependencies = [
+  "dander-platform>=0.4.0rc1,<0.5",
+  "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/harrisonoconnorhover/dander-connector-salesforce"
+Issues = "https://github.com/harrisonoconnorhover/dander-connector-salesforce/issues"
+Repository = "https://github.com/harrisonoconnorhover/dander-connector-salesforce.git"
+
+[project.entry-points."dander.connectors"]
+salesforce = "dander_connector_salesforce.plugin:create_plugin"
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.11",
+  "pytest>=8.3",
+  "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dander_connector_salesforce"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  ".github",
+  "CHANGELOG.md",
+  "HANDOFF.md",
+  "LICENSE",
+  "README.md",
+  "pyproject.toml",
+  "src",
+  "tests",
+  "uv.lock",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "TCH", "ANN"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
