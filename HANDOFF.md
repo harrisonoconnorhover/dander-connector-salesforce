@@ -2,40 +2,37 @@
 
 ## Finished
 
-- Added record-free Salesforce connection testing through the REST limits resource.
-- Added exact Account counts through an aggregate SOQL query.
-- Added targeted Account lookup by a validated Salesforce `Id` without a Bulk job.
-- Proved the accepted candidate source-free against a disposable Salesforce org and GCP project.
-- Prepared stable `0.2.0` from the accepted `0.2.0rc2` runtime.
+- Published stable Salesforce connector `0.2.0` from its accepted live-tested candidate.
+- Kept bounded Bulk API 2.0 extraction and added record-free connection testing, exact Account
+  counts, and validated targeted Account lookup.
+- Installed the public plugin source-free in the retained Dander project with an exact manifest
+  pin and Dander `0.5.x` compatibility.
 
 ## Try It
 
 ```bash
-uv run --with-editable /Users/harrison/Documents/dander pytest
+uv sync --extra dev
+uv run pytest
 ```
 
 ## Checks
 
-- Ruff, formatting, strict mypy, dependency audit, and `git diff --check` passed.
-- All 34 plugin, source, and cross-repository CLI tests passed.
-- The wheel and source distribution built; a source-free install discovered the API-v1 plugin.
-- Live acceptance passed connection check, exact count, single-record lookup, ingestion, replay,
-  cursor and lease checks, staging cleanup, scheduler restoration, and Terraform no-drift.
+- Ruff, formatting, strict mypy, and all 34 tests passed.
+- Live acceptance covered connection, count, targeted lookup, ingestion, replay, cursor/lease
+  safety, staging cleanup, scheduler restoration, and Terraform no-drift.
+- Local Markdown links and `git diff --check` passed.
 
 ## Decisions
 
-- Bulk API 2.0 remains the only extraction path; small optional reads use Salesforce REST.
-- Targeted lookup accepts only the endpoint's declared `Id` and validates its 15/18-character form.
+- Bulk API 2.0 remains the extraction path; small optional reads use Salesforce REST.
 - Provider mutations, deleted-record consumption, and automatic preflight remain out of scope.
 
 ## Remaining
 
-- Merge the stable release PR through protected CI.
-- Tag and publish `0.2.0` through trusted publishing.
-- Verify an exact public source-free installation.
+- Continue retained-project soak observation on the public `0.2.0` plugin.
 
 ## Review First
 
+- `README.md`
 - `src/dander_connector_salesforce/source.py`
 - `tests/test_source.py`
-- `tests/test_dander_cli.py`
