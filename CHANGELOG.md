@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Declare compatibility with Dander `0.5.x`; connector runtime behavior is unchanged from
+  `0.1.0`.
+
 ## 0.1.0
 
 - Promote the accepted Salesforce connector candidate without changing packaged runtime behavior.

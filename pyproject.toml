@@ -1,6 +1,6 @@
 [project]
 name = "dander-connector-salesforce"
-version = "0.1.0"
+version = "0.1.1"
 description = "Salesforce Bulk API 2.0 connector plugin for Dander."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,7 +16,7 @@ classifiers = [
   "Topic :: Database",
 ]
 dependencies = [
-  "dander-platform>=0.4.0,<0.5",
+  "dander-platform>=0.4.0,<0.6",
   "httpx>=0.27",
 ]
 
