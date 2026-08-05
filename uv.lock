@@ -451,7 +451,7 @@ wheels = [
 
 [[package]]
 name = "dander-connector-salesforce"
-version = "0.2.0rc2"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "dander-platform" },
