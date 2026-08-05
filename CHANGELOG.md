@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add structural targeted-lookup, exact-count, and record-free connection-test capabilities.
+- Reuse Salesforce REST query/queryAll and limits resources while retaining Bulk API 2.0 for
+  bounded extraction.
+- Require public Dander `0.5.0rc1` or newer for its capability contract and CLI.
+
 ## 0.1.1
 
 - Declare compatibility with Dander `0.5.x`; connector runtime behavior is unchanged from

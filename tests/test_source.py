@@ -5,7 +5,15 @@ from typing import TYPE_CHECKING, cast
 
 import httpx
 import pytest
-from dander.ingestion import EnterpriseSourceError
+from dander.ingestion import (
+    RECORD_NOT_FOUND,
+    ConnectionStatus,
+    ConnectorOperation,
+    CountResult,
+    EnterpriseSourceError,
+    RecordNotFound,
+    SourceCapabilities,
+)
 
 from dander_connector_salesforce.source import SalesforceBulk2Source
 from tests.conftest import CsvResponse, FakeAuth, FakeClient
@@ -25,6 +33,25 @@ _ROW_2 = (
     "001B,Beta,,,,,,,US,2026-01-02T00:00:00.000Z,2026-08-01T12:00:00.000Z,"
     "2026-08-01T12:00:00.000Z,true"
 )
+
+
+def _rest_account(*, account_id: str = "001000000000001AAA") -> dict[str, object]:
+    return {
+        "attributes": {"type": "Account", "url": f"/sobjects/Account/{account_id}"},
+        "Id": account_id,
+        "Name": "Acme",
+        "Type": "Customer",
+        "Industry": "Technology",
+        "AnnualRevenue": 125.5,
+        "NumberOfEmployees": 42,
+        "BillingCity": "Boston",
+        "BillingState": "MA",
+        "BillingCountry": "US",
+        "CreatedDate": "2026-01-01T00:00:00.000Z",
+        "LastModifiedDate": "2026-08-01T11:00:00.000Z",
+        "SystemModstamp": "2026-08-01T11:00:00.000Z",
+        "IsDeleted": False,
+    }
 
 
 def _request_body(request: httpx.Request) -> dict[str, object]:
@@ -188,4 +215,180 @@ def test_declared_discovery_has_no_network(config: SourceConfig, auth: FakeAuth)
     discovered = source.discover()
 
     assert discovered["accounts"]["incremental_cursor"] == "SystemModstamp"
+    assert client.requests == []
+
+
+def test_read_capabilities_are_structurally_discovered(
+    config: SourceConfig, auth: FakeAuth
+) -> None:
+    source = SalesforceBulk2Source(config, auth, client=FakeClient([]))
+
+    assert SourceCapabilities(source).supported_operations == frozenset(
+        {
+            ConnectorOperation.COUNT,
+            ConnectorOperation.GET_SINGLE_OBJECT,
+            ConnectorOperation.TEST_CONNECTION,
+        }
+    )
+
+
+def test_connection_uses_limits_resource_without_business_records(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([{"DailyApiRequests": {"Max": 15_000, "Remaining": 14_999}}])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    assert source.test_connection() == ConnectionStatus(ok=True)
+    assert client.requests[0].method == "GET"
+    assert client.requests[0].url.path.endswith("/services/data/v67.0/limits")
+    assert "q" not in client.requests[0].url.params
+
+
+@pytest.mark.parametrize(
+    ("status", "detail"),
+    [(401, "authentication failed"), (403, "permission denied")],
+)
+def test_connection_returns_expected_auth_refusal(
+    config: SourceConfig,
+    auth: FakeAuth,
+    status: int,
+    detail: str,
+) -> None:
+    request = httpx.Request("GET", "https://salesforce.example.test/services/data/v67.0/limits")
+    response = httpx.Response(status, request=request)
+    error = httpx.HTTPStatusError("failure", request=request, response=response)
+    source = SalesforceBulk2Source(config, auth, client=FakeClient([error]))
+
+    assert source.test_connection() == ConnectionStatus(ok=False, detail=detail)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [None, {}, {"DailyApiRequests": {}}, {"DailyApiRequests": {"Max": True, "Remaining": 1}}],
+)
+def test_connection_rejects_malformed_limits_response(
+    config: SourceConfig,
+    auth: FakeAuth,
+    payload: object,
+) -> None:
+    source = SalesforceBulk2Source(config, auth, client=FakeClient([payload]))
+
+    with pytest.raises(EnterpriseSourceError, match="limits response was invalid"):
+        source.test_connection()
+
+
+def test_count_uses_exact_aggregate_query_and_optional_watermark(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient(
+        [
+            {
+                "totalSize": 1,
+                "done": True,
+                "records": [{"attributes": {"type": "AggregateResult"}, "total": 2}],
+            }
+        ]
+    )
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    result = source.count("accounts", since="2026-08-01T12:34:56.789123+00:00")
+
+    assert result == CountResult.exact(2)
+    assert client.requests[0].method == "GET"
+    assert client.requests[0].url.path.endswith("/queryAll")
+    assert client.requests[0].url.params["q"] == (
+        "SELECT COUNT() total FROM Account WHERE SystemModstamp >= 2026-08-01T12:34:56.789Z"
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"totalSize": 1, "done": False, "records": [{"total": 2}]},
+        {"totalSize": 1, "done": True, "records": [{"total": -1}]},
+        {"totalSize": 1, "done": True, "records": [{"total": "2"}]},
+    ],
+)
+def test_count_rejects_malformed_aggregate_result(
+    config: SourceConfig,
+    auth: FakeAuth,
+    payload: object,
+) -> None:
+    source = SalesforceBulk2Source(config, auth, client=FakeClient([payload]))
+
+    with pytest.raises(
+        EnterpriseSourceError,
+        match="query response was invalid|count returned an invalid",
+    ):
+        source.count("accounts")
+
+
+def test_count_accepts_salesforce_total_size_only_response(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=FakeClient([{"totalSize": 2, "done": True, "records": []}]),
+    )
+
+    assert source.count("accounts") == CountResult.exact(2)
+
+
+def test_get_single_object_queries_one_id_and_matches_extract_shape(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    account_id = "001000000000001AAA"
+    client = FakeClient(
+        [{"totalSize": 1, "done": True, "records": [_rest_account(account_id=account_id)]}]
+    )
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    record = source.get_single_object("accounts", {"Id": account_id})
+
+    assert not isinstance(record, RecordNotFound)
+    assert record["Id"] == account_id
+    assert record["AnnualRevenue"] == "125.5"
+    assert record["NumberOfEmployees"] == "42"
+    assert record["IsDeleted"] is False
+    assert "attributes" not in record
+    assert client.requests[0].url.path.endswith("/queryAll")
+    assert str(client.requests[0].url.params["q"]).endswith(
+        f"FROM Account WHERE Id = '{account_id}' LIMIT 1"
+    )
+
+
+def test_get_single_object_returns_named_not_found_sentinel(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=FakeClient([{"totalSize": 0, "done": True, "records": []}]),
+    )
+
+    assert source.get_single_object("accounts", {"Id": "001000000000001AAA"}) is RECORD_NOT_FOUND
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [{}, {"Other": "001000000000001AAA"}, {"Id": "unsafe value"}],
+)
+def test_get_single_object_rejects_invalid_identity_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+    identity: dict[str, str],
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="identity field 'Id'|invalid Id") as error:
+        source.get_single_object("accounts", identity)
+
+    assert not any(value in str(error.value) for value in identity.values())
     assert client.requests == []
