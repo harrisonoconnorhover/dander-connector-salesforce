@@ -38,15 +38,14 @@ External Client App ID and RSA private key in Dander's configured secret store.
 - Optional reads: exact aggregate count and one Account lookup by validated Salesforce `Id`
 - Connection check: authenticated REST `/limits` probe that returns no business records
 
-With a capability-enabled Dander build, inspect and check the installed connector without running
-ingestion:
+With Dander `0.5.0rc1` or newer, inspect and check an installed pipeline without running ingestion:
 
 ```console
-dander connector inspect salesforce
-dander connector check salesforce
+dander connector inspect PIPELINE_ID
+dander connector check PIPELINE_ID
 ```
 
-The built-in Salesforce adapter in Dander 0.4 remains a deprecated fallback. When this plugin is
+Dander retains its deprecated built-in Salesforce fallback for compatibility. When this plugin is
 explicitly pinned, the plugin implementation takes precedence.
 
 ## Development

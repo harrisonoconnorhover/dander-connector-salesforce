@@ -15,10 +15,10 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 ## Checks
 
-- Ruff and strict mypy passed against local merged Dander `main`.
-- All 34 plugin, source, and cross-repository CLI tests passed against local Dander `main`.
-- Standard tests intentionally fail at import because public Dander `0.4.0` lacks the new
-  capability types; this confirms the candidate-publication gate.
+- Ruff, format, and strict mypy passed against public Dander `0.5.0rc1`.
+- All 34 plugin, source, and cross-repository CLI tests passed.
+- Built artifacts installed with public Dander outside both source checkouts; capability inspection
+  reported targeted lookup, exact count, and connection checking.
 
 ## Decisions
 
@@ -28,9 +28,7 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 ## Remaining
 
-- Publish a Dander candidate containing protected PRs #71 and #72 after explicit approval.
-- Raise the plugin dependency floor and lockfile to that candidate.
-- Rerun ordinary CI, build/install the plugin candidate, and open its focused PR.
+- Open and merge the focused Salesforce capability PR through protected CI.
 - Perform one narrow disposable-org capability check before final promotion.
 
 ## Review First
