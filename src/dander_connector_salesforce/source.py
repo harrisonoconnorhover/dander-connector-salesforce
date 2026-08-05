@@ -11,10 +11,14 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import httpx
 from dander.ingestion import (
+    RECORD_NOT_FOUND,
+    ConnectionStatus,
+    CountResult,
     Endpoint,
     EnterpriseSource,
     EnterpriseSourceError,
     HeaderCursorPagination,
+    RecordNotFound,
 )
 
 if TYPE_CHECKING:
@@ -28,6 +32,12 @@ _ACTIVE_STATES = frozenset({"UploadComplete", "InProgress"})
 _FAILED_STATES = frozenset({"Aborted", "Failed"})
 _MAX_POLLS = 240
 _SOQL_SCALE_BREAKERS = re.compile(r"\b(?:GROUP\s+BY|LIMIT|OFFSET|ORDER\s+BY|TYPEOF|WHERE)\b", re.I)
+_SOQL_SHAPE = re.compile(
+    r"^\s*SELECT\s+(?P<fields>.+?)\s+FROM\s+(?P<object>[A-Za-z][A-Za-z0-9_]*)\s*$",
+    re.I | re.S,
+)
+_SOQL_FIELD = re.compile(r"^[A-Za-z][A-Za-z0-9_.]*$")
+_SALESFORCE_ID = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
 
 
 class _StreamingResponse(Protocol):
@@ -90,6 +100,98 @@ class SalesforceBulk2Source(EnterpriseSource):
             yield from self._results(job_url, job_id, endpoint, declaration, pagination)
         finally:
             self._delete_job(job_url, job_id, endpoint)
+
+    def get_single_object(
+        self,
+        endpoint: str,
+        identity: Mapping[str, str],
+    ) -> Mapping[str, Any] | RecordNotFound:
+        """Fetch one Salesforce record by its declared ``Id`` without running a bulk job."""
+        declaration = self._endpoint(endpoint)
+        fields, object_name = _query_shape(declaration)
+        if declaration.primary_key != ["Id"] or set(identity) != {"Id"}:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} targeted lookup requires identity field 'Id'"
+            )
+        record_id = identity["Id"]
+        if not _SALESFORCE_ID.fullmatch(record_id):
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} targeted lookup received an invalid Id"
+            )
+        query = f"SELECT {', '.join(fields)} FROM {object_name} WHERE Id = '{record_id}' LIMIT 1"
+        payload = self._rest_query(declaration, query)
+        total_size, records = _query_records(payload, declaration)
+        if total_size == 0 and not records:
+            return RECORD_NOT_FOUND
+        if total_size != 1 or len(records) != 1:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} targeted lookup returned multiple records"
+            )
+        return _normalize_rest_record(records[0], declaration, fields)
+
+    def count(self, endpoint: str, *, since: str | None = None) -> CountResult:
+        """Return Salesforce's exact aggregate count without materializing business records."""
+        declaration = self._endpoint(endpoint)
+        _, object_name = _query_shape(declaration)
+        query = f"SELECT COUNT() total FROM {object_name}"
+        if since is not None:
+            if declaration.incremental_cursor is None:
+                raise EnterpriseSourceError(
+                    f"Endpoint {endpoint!r} received a cursor without incremental_cursor"
+                )
+            query += (
+                f" WHERE {declaration.incremental_cursor} >= {_datetime_literal(since, endpoint)}"
+            )
+        payload = self._rest_query(declaration, query)
+        total_size, records = _query_records(payload, declaration)
+        if not records:
+            return CountResult.exact(total_size)
+        if len(records) != 1:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} count returned an invalid result"
+            )
+        count = records[0].get("total")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} count returned an invalid total"
+            )
+        return CountResult.exact(count)
+
+    def test_connection(self) -> ConnectionStatus:
+        """Authenticate against Salesforce's limits resource without reading business data."""
+        try:
+            response = self._send(
+                httpx.Request(
+                    "GET",
+                    f"{self.config.base_url.rstrip('/')}/limits",
+                    headers={"Accept": "application/json"},
+                ),
+                self.config.name,
+            )
+        except EnterpriseSourceError as error:
+            message = str(error)
+            for detail in ("authentication failed", "permission denied", "request was rejected"):
+                if detail in message:
+                    return ConnectionStatus(ok=False, detail=detail)
+            raise
+        payload = response.json()
+        if not _valid_limits_payload(payload):
+            raise EnterpriseSourceError("Salesforce limits response was invalid")
+        return ConnectionStatus(ok=True)
+
+    def _rest_query(self, endpoint: Endpoint, query: str) -> object:
+        operation = endpoint.request_body.get("operation")
+        resource = "queryAll" if operation == "queryAll" else "query"
+        response = self._send(
+            httpx.Request(
+                "GET",
+                f"{self.config.base_url.rstrip('/')}/{resource}",
+                params={"q": query},
+                headers={"Accept": "application/json"},
+            ),
+            endpoint.name,
+        )
+        return response.json()
 
     def _await_job(self, job_url: str, job_id: str, endpoint: str) -> None:
         poll_url = f"{job_url}/{job_id}"
@@ -257,6 +359,92 @@ def _validate_endpoint(endpoint: Endpoint) -> HeaderCursorPagination:
             "unordered SELECT; Dander adds the watermark filter and preserves PK chunking"
         )
     return pagination
+
+
+def _query_shape(endpoint: Endpoint) -> tuple[tuple[str, ...], str]:
+    """Return the simple selected fields and object shared by optional REST reads."""
+    _validate_endpoint(endpoint)
+    query = cast("str", endpoint.request_body["query"])
+    match = _SOQL_SHAPE.fullmatch(query)
+    if match is None:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} query must be a simple SELECT"
+        )
+    fields = tuple(field.strip() for field in match.group("fields").split(","))
+    if not fields or any(not _SOQL_FIELD.fullmatch(field) for field in fields):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} query has unsupported field syntax"
+        )
+    _validate_csv_fields(list(fields), endpoint)
+    return fields, match.group("object")
+
+
+def _query_records(payload: object, endpoint: Endpoint) -> tuple[int, list[dict[str, Any]]]:
+    if not isinstance(payload, dict):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} query response was invalid"
+        )
+    records = payload.get("records")
+    total_size = payload.get("totalSize")
+    done = payload.get("done")
+    if (
+        not isinstance(records, list)
+        or not all(isinstance(record, dict) for record in records)
+        or isinstance(total_size, bool)
+        or not isinstance(total_size, int)
+        or total_size < 0
+        or done is not True
+    ):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} query response was invalid"
+        )
+    return total_size, cast("list[dict[str, Any]]", records)
+
+
+def _normalize_rest_record(
+    record: Mapping[str, Any],
+    endpoint: Endpoint,
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    values = {name: value for name, value in record.items() if name != "attributes"}
+    if set(values) != set(fields):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} targeted record fields were invalid"
+        )
+    declarations = {field.name: field for field in endpoint.raw_schema}
+    normalized: dict[str, Any] = {}
+    for name in fields:
+        value = values[name]
+        if value is None:
+            normalized[name] = None
+        elif declarations[name].data_type == "BOOL":
+            if not isinstance(value, bool):
+                raise EnterpriseSourceError(
+                    f"Salesforce endpoint {endpoint.name!r} targeted record field {name!r} "
+                    "was invalid"
+                )
+            normalized[name] = value
+        elif isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            normalized[name] = str(value)
+        else:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint.name!r} targeted record field {name!r} was invalid"
+            )
+    return normalized
+
+
+def _valid_limits_payload(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    daily = payload.get("DailyApiRequests")
+    if not isinstance(daily, dict):
+        return False
+    maximum = daily.get("Max")
+    remaining = daily.get("Remaining")
+    return all(
+        not isinstance(value, bool) and isinstance(value, int) and value >= 0
+        for value in (maximum, remaining)
+    )
 
 
 def _query_body(endpoint: Endpoint, since: str | None) -> dict[str, object]:

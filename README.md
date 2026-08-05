@@ -35,6 +35,16 @@ External Client App ID and RSA private key in Dander's configured secret store.
 - Publication: Dander's existing SCD1 writer
 - Cursor: `SystemModstamp`, applied as a server-side SOQL filter on replay
 - Memory: CSV result pages are streamed and bounded by `maxRecords`
+- Optional reads: exact aggregate count and one Account lookup by validated Salesforce `Id`
+- Connection check: authenticated REST `/limits` probe that returns no business records
+
+With a capability-enabled Dander build, inspect and check the installed connector without running
+ingestion:
+
+```console
+dander connector inspect salesforce
+dander connector check salesforce
+```
 
 The built-in Salesforce adapter in Dander 0.4 remains a deprecated fallback. When this plugin is
 explicitly pinned, the plugin implementation takes precedence.
