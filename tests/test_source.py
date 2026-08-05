@@ -285,9 +285,9 @@ def test_count_uses_exact_aggregate_query_and_optional_watermark(
     client = FakeClient(
         [
             {
-                "totalSize": 1,
+                "totalSize": 2,
                 "done": True,
-                "records": [{"attributes": {"type": "AggregateResult"}, "total": 2}],
+                "records": [],
             }
         ]
     )
@@ -299,7 +299,7 @@ def test_count_uses_exact_aggregate_query_and_optional_watermark(
     assert client.requests[0].method == "GET"
     assert client.requests[0].url.path.endswith("/queryAll")
     assert client.requests[0].url.params["q"] == (
-        "SELECT COUNT() total FROM Account WHERE SystemModstamp >= 2026-08-01T12:34:56.789Z"
+        "SELECT COUNT() FROM Account WHERE SystemModstamp >= 2026-08-01T12:34:56.789Z"
     )
 
 
