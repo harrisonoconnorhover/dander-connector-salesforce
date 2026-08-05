@@ -1,6 +1,6 @@
 [project]
 name = "dander-connector-salesforce"
-version = "0.2.0rc1"
+version = "0.2.0rc2"
 description = "Salesforce Bulk API 2.0 connector plugin for Dander."
 readme = "README.md"
 requires-python = ">=3.12"

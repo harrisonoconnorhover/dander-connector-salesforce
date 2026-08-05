@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.0rc2 — 2026-08-05 (alpha)
+
+- Generate Salesforce's valid unaliased `COUNT()` SOQL form after isolated live acceptance
+  exposed a rejected aggregate query in `0.2.0rc1`.
+
 ## 0.2.0rc1 — 2026-08-05 (alpha)
 
 - Add structural targeted-lookup, exact-count, and record-free connection-test capabilities.

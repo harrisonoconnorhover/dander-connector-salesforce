@@ -133,7 +133,7 @@ class SalesforceBulk2Source(EnterpriseSource):
         """Return Salesforce's exact aggregate count without materializing business records."""
         declaration = self._endpoint(endpoint)
         _, object_name = _query_shape(declaration)
-        query = f"SELECT COUNT() total FROM {object_name}"
+        query = f"SELECT COUNT() FROM {object_name}"
         if since is not None:
             if declaration.incremental_cursor is None:
                 raise EnterpriseSourceError(
