@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0
+
+- Promote the accepted Salesforce connector candidate without changing packaged runtime behavior.
+- Require stable Dander `0.4.x` while preserving the plugin API-v1 and `salesforce_bulk2` contract.
+
 ## 0.1.0rc1
 
 - Add the first-party `salesforce_bulk2` Dander connector plugin.
