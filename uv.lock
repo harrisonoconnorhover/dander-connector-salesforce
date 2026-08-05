@@ -451,7 +451,7 @@ wheels = [
 
 [[package]]
 name = "dander-connector-salesforce"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "dander-platform" },
@@ -467,7 +467,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dander-platform", specifier = ">=0.4.0,<0.5" },
+    { name = "dander-platform", specifier = ">=0.4.0,<0.6" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
