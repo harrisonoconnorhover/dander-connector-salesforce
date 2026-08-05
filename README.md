@@ -14,7 +14,7 @@ Declare the exact plugin version in `dander.yaml`:
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.1.1
+    version: 0.2.0rc1
 ```
 
 Then install exactly what the manifest declares:

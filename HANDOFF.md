@@ -6,6 +6,7 @@
 - Added exact Account counts through an aggregate SOQL query.
 - Added targeted Account lookup by a validated Salesforce `Id` without a Bulk job.
 - Proved Dander's installed-plugin inspect/check path discovers and invokes the implementation.
+- Prepared the merged capability implementation as `0.2.0rc1` for isolated acceptance.
 
 ## Try It
 
@@ -15,10 +16,10 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 ## Checks
 
-- Ruff, format, and strict mypy passed against public Dander `0.5.0rc1`.
+- Ruff, formatting, strict mypy, dependency audit, and `git diff --check` passed.
 - All 34 plugin, source, and cross-repository CLI tests passed.
-- Built artifacts installed with public Dander outside both source checkouts; capability inspection
-  reported targeted lookup, exact count, and connection checking.
+- The wheel and source distribution built successfully; the wheel installed outside both source
+  checkouts with public Dander `0.5.0rc1` and exposed all three read capabilities.
 
 ## Decisions
 
@@ -28,8 +29,9 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 ## Remaining
 
-- Open and merge the focused Salesforce capability PR through protected CI.
-- Perform one narrow disposable-org capability check before final promotion.
+- Merge and publish `0.2.0rc1` through protected CI and trusted publishing.
+- Run the source-free disposable-org capability and graph-operation acceptance.
+- Promote `0.2.0` only if the complete candidate acceptance passes.
 
 ## Review First
 
