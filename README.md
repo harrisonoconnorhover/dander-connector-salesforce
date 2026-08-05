@@ -14,7 +14,7 @@ Declare the exact plugin version in `dander.yaml`:
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.2.0rc2
+    version: 0.2.0
 ```
 
 Then install exactly what the manifest declares:
@@ -38,7 +38,7 @@ External Client App ID and RSA private key in Dander's configured secret store.
 - Optional reads: exact aggregate count and one Account lookup by validated Salesforce `Id`
 - Connection check: authenticated REST `/limits` probe that returns no business records
 
-With Dander `0.5.0rc1` or newer, inspect and check an installed pipeline without running ingestion:
+With Dander `0.5.0` or newer, inspect and check an installed pipeline without running ingestion:
 
 ```console
 dander connector inspect PIPELINE_ID

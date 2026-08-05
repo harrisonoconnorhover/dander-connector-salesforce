@@ -5,9 +5,8 @@
 - Added record-free Salesforce connection testing through the REST limits resource.
 - Added exact Account counts through an aggregate SOQL query.
 - Added targeted Account lookup by a validated Salesforce `Id` without a Bulk job.
-- Proved Dander's installed-plugin inspect/check path discovers and invokes the implementation.
-- Corrected the count query after `0.2.0rc1` live acceptance exposed Salesforce's rejection of an
-  alias on `COUNT()`; prepared replacement candidate `0.2.0rc2`.
+- Proved the accepted candidate source-free against a disposable Salesforce org and GCP project.
+- Prepared stable `0.2.0` from the accepted `0.2.0rc2` runtime.
 
 ## Try It
 
@@ -19,8 +18,9 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 - Ruff, formatting, strict mypy, dependency audit, and `git diff --check` passed.
 - All 34 plugin, source, and cross-repository CLI tests passed.
-- The `0.2.0rc2` wheel and source distribution built; a source-free install with public Dander
-  `0.5.0rc2` discovered the API-v1 Salesforce plugin.
+- The wheel and source distribution built; a source-free install discovered the API-v1 plugin.
+- Live acceptance passed connection check, exact count, single-record lookup, ingestion, replay,
+  cursor and lease checks, staging cleanup, scheduler restoration, and Terraform no-drift.
 
 ## Decisions
 
@@ -30,9 +30,9 @@ uv run --with-editable /Users/harrison/Documents/dander pytest
 
 ## Remaining
 
-- Merge and publish `0.2.0rc2` through protected CI and trusted publishing.
-- Run the source-free disposable-org capability and graph-operation acceptance.
-- Promote `0.2.0` only if the complete candidate acceptance passes.
+- Merge the stable release PR through protected CI.
+- Tag and publish `0.2.0` through trusted publishing.
+- Verify an exact public source-free installation.
 
 ## Review First
 

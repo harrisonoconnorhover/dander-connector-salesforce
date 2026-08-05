@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-08-05 (alpha)
+
+- Promote the accepted read-capability candidate without changing connector runtime behavior.
+- Provide connection testing, exact counts, and validated single-record lookup alongside bounded
+  Bulk API 2.0 extraction.
+
 ## 0.2.0rc2 — 2026-08-05 (alpha)
 
 - Generate Salesforce's valid unaliased `COUNT()` SOQL form after isolated live acceptance
