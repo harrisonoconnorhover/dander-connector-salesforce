@@ -14,6 +14,7 @@ from dander.ingestion import (
     RECORD_NOT_FOUND,
     ConnectionStatus,
     CountResult,
+    DeleteOutcome,
     Endpoint,
     EnterpriseSource,
     EnterpriseSourceError,
@@ -243,6 +244,36 @@ class SalesforceBulk2Source(EnterpriseSource):
             endpoint,
         )
         return {"Id": record_id}
+
+    def delete(self, endpoint: str, identity: Mapping[str, str]) -> DeleteOutcome:
+        """Delete one Salesforce record, treating an absent record as a normal outcome."""
+        declaration = self._endpoint(endpoint)
+        _, object_name = _query_shape(declaration)
+        record_id = _record_id(identity, declaration)
+        request = httpx.Request(
+            "DELETE",
+            f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}/{record_id}",
+            headers={"Accept": "application/json"},
+        )
+        try:
+            response = self._client.send(self._auth.apply(request))
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            if status == 404:
+                return DeleteOutcome.NOT_FOUND
+            reason = {401: "authentication failed", 403: "permission denied"}.get(
+                status, "delete was rejected"
+            )
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} {reason} (HTTP {status}); delete was not retried"
+            ) from error
+        except httpx.HTTPError as error:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} delete result is ambiguous; "
+                "delete was not retried"
+            ) from error
+        return DeleteOutcome.DELETED
 
     def test_connection(self) -> ConnectionStatus:
         """Authenticate against Salesforce's limits resource without reading business data."""

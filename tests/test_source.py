@@ -12,6 +12,7 @@ from dander.ingestion import (
     ConnectionStatus,
     ConnectorOperation,
     CountResult,
+    DeleteOutcome,
     EnterpriseSourceError,
     RecordNotFound,
     SourceCapabilities,
@@ -297,6 +298,7 @@ def test_read_capabilities_are_structurally_discovered(
         {
             ConnectorOperation.COUNT,
             ConnectorOperation.CREATE,
+            ConnectorOperation.DELETE,
             ConnectorOperation.GET_DELETED,
             ConnectorOperation.GET_SINGLE_OBJECT,
             ConnectorOperation.TEST_CONNECTION,
@@ -701,5 +703,48 @@ def test_update_reuses_declared_field_validation(
             {"Id": "001000000000003AAA"},
             {"SystemModstamp": "2026-08-06T12:00:00Z"},
         )
+
+    assert client.requests == []
+
+
+def test_delete_removes_one_record_and_returns_closed_outcome(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([{}])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    assert source.delete("accounts", {"Id": "001000000000003AAA"}) is DeleteOutcome.DELETED
+    request = client.requests[0]
+    assert request.method == "DELETE"
+    assert request.url.path.endswith("/sobjects/Account/001000000000003AAA")
+    assert auth.requests == 1
+
+
+def test_delete_returns_not_found_for_repeatable_absent_record(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    request = httpx.Request(
+        "DELETE", "https://salesforce.example.test/sobjects/Account/001000000000003AAA"
+    )
+    response = httpx.Response(404, request=request)
+    error = httpx.HTTPStatusError("not found", request=request, response=response)
+    client = FakeClient([error])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    assert source.delete("accounts", {"Id": "001000000000003AAA"}) is DeleteOutcome.NOT_FOUND
+    assert len(client.requests) == 1
+
+
+def test_delete_rejects_invalid_identity_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="invalid Id"):
+        source.delete("accounts", {"Id": "invalid"})
 
     assert client.requests == []
