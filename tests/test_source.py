@@ -296,6 +296,7 @@ def test_read_capabilities_are_structurally_discovered(
     assert SourceCapabilities(source).supported_operations == frozenset(
         {
             ConnectorOperation.COUNT,
+            ConnectorOperation.CREATE,
             ConnectorOperation.GET_DELETED,
             ConnectorOperation.GET_SINGLE_OBJECT,
             ConnectorOperation.TEST_CONNECTION,
@@ -575,3 +576,78 @@ def test_get_deleted_rejects_malformed_response(
 
     with pytest.raises(EnterpriseSourceError, match="deleted-record response was invalid"):
         list(source.get_deleted("opportunities", since="2026-08-01T00:00:00Z"))
+
+
+def test_create_posts_one_declared_record_and_returns_identity(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([{"id": "001000000000003AAA", "success": True, "errors": []}])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    assert source.create("accounts", {"Name": "Dander Test Account"}) == {
+        "Id": "001000000000003AAA"
+    }
+    request = client.requests[0]
+    assert request.method == "POST"
+    assert request.url.path.endswith("/sobjects/Account")
+    assert _request_body(request) == {"Name": "Dander Test Account"}
+    assert auth.requests == 1
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {},
+        {"UnknownField": "value"},
+        {"Id": "001000000000003AAA", "Name": "Dander Test Account"},
+    ],
+)
+def test_create_rejects_empty_undeclared_or_read_only_fields_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+    record: dict[str, object],
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="at least one field|undeclared|read-only"):
+        source.create("accounts", record)
+
+    assert client.requests == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        {},
+        {"id": "invalid", "success": True, "errors": []},
+        {"id": "001000000000003AAA", "success": False, "errors": []},
+        {"id": "001000000000003AAA", "success": True, "errors": ["failure"]},
+    ],
+)
+def test_create_rejects_malformed_response(
+    config: SourceConfig,
+    auth: FakeAuth,
+    payload: object,
+) -> None:
+    source = SalesforceBulk2Source(config, auth, client=FakeClient([payload]))
+
+    with pytest.raises(EnterpriseSourceError, match="create response was invalid"):
+        source.create("accounts", {"Name": "Dander Test Account"})
+
+
+def test_create_does_not_retry_ambiguous_transport_failure(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    request = httpx.Request("POST", "https://salesforce.example.test/sobjects/Account")
+    client = FakeClient([httpx.ReadTimeout("ambiguous", request=request)])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="ambiguous; write was not retried"):
+        source.create("accounts", {"Name": "Dander Test Account"})
+
+    assert len(client.requests) == 1
+    assert auth.requests == 1
