@@ -50,7 +50,9 @@ jobs:
         run: |
           TEMP_DIR="$(mktemp -d)"
           uv venv "$TEMP_DIR/venv"
-          uv pip install --python "$TEMP_DIR/venv/bin/python" dist/*.whl
+          uv pip install --python "$TEMP_DIR/venv/bin/python" \
+            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@27b8f65ea36fea92d8e70707333bb1aa9e3f6478"
+          uv pip install --python "$TEMP_DIR/venv/bin/python" --no-deps dist/*.whl
           cd "$TEMP_DIR"
           "$TEMP_DIR/venv/bin/python" -c \
             'from dander_connector_salesforce import create_plugin; assert create_plugin().engine == "salesforce_bulk2"'

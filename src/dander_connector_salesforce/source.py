@@ -169,7 +169,7 @@ class SalesforceBulk2Source(EnterpriseSource):
         *,
         since: str | None = None,
     ) -> Iterator[Mapping[str, Any]]:
-        """Yield Salesforce IDs deleted within its retained 30-day window."""
+        """Yield Salesforce IDs deleted within its retained 15-day window."""
         declaration = self._endpoint(endpoint)
         _, object_name = _query_shape(declaration)
         if declaration.request_body.get("operation") != "queryAll":
@@ -177,14 +177,14 @@ class SalesforceBulk2Source(EnterpriseSource):
                 f"Salesforce endpoint {endpoint!r} does not expose a deleted-record feed"
             )
         end = self._clock().astimezone(UTC)
-        start = end - timedelta(days=30) if since is None else _datetime_value(since, endpoint)
-        if start > end:
+        start = end - timedelta(days=15) if since is None else _datetime_value(since, endpoint)
+        if start >= end:
             raise EnterpriseSourceError(
-                f"Salesforce endpoint {endpoint!r} received a future deleted-record cursor"
+                f"Salesforce endpoint {endpoint!r} deleted-record cursor must precede the end"
             )
-        if end - start > timedelta(days=30):
+        if end - start > timedelta(days=15):
             raise EnterpriseSourceError(
-                f"Salesforce endpoint {endpoint!r} deleted records are retained for 30 days"
+                f"Salesforce endpoint {endpoint!r} deleted records are retained for 15 days"
             )
         response = self._send(
             httpx.Request(

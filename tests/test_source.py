@@ -472,7 +472,7 @@ def test_get_deleted_returns_business_keys_and_forwards_window(
     client = FakeClient(
         [
             {
-                "earliestDateAvailable": "2026-07-07T12:00:00.000+0000",
+                "earliestDateAvailable": "2026-07-22T12:00:00.000+0000",
                 "latestDateCovered": "2026-08-06T12:00:00.000+0000",
                 "deletedRecords": [
                     {
@@ -518,15 +518,16 @@ def test_get_deleted_defaults_to_salesforce_retention_window(
     )
 
     assert list(source.get_deleted("contacts")) == []
-    assert client.requests[0].url.params["start"] == "2026-07-07T12:00:00.000Z"
+    assert client.requests[0].url.params["start"] == "2026-07-22T12:00:00.000Z"
 
 
 @pytest.mark.parametrize(
     ("endpoint", "since", "message"),
     [
         ("users", None, "does not expose a deleted-record feed"),
-        ("accounts", "2026-07-01T00:00:00Z", "retained for 30 days"),
-        ("accounts", "2026-08-07T00:00:00Z", "future deleted-record cursor"),
+        ("accounts", "2026-07-21T00:00:00Z", "retained for 15 days"),
+        ("accounts", "2026-08-06T12:00:00Z", "must precede the end"),
+        ("accounts", "2026-08-07T00:00:00Z", "must precede the end"),
     ],
 )
 def test_get_deleted_rejects_unsupported_endpoint_or_window_before_network(
