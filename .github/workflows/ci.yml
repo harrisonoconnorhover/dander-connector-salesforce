@@ -25,8 +25,12 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run mypy src tests
-      - run: uv run pytest
+      - name: Install exact Dander deleted-feed contract
+        run: |
+          uv pip install --python .venv/bin/python --reinstall \
+            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@27b8f65ea36fea92d8e70707333bb1aa9e3f6478"
+      - run: uv run --no-sync mypy src tests
+      - run: uv run --no-sync pytest
       - name: Dependency audit
         run: |
           uv export --frozen --format requirements.txt --no-dev --no-emit-project \

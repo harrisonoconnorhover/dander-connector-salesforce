@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from time import sleep
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
@@ -40,6 +40,10 @@ _SOQL_FIELD = re.compile(r"^[A-Za-z][A-Za-z0-9_.]*$")
 _SALESFORCE_ID = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
 
 
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
 class _StreamingResponse(Protocol):
     headers: Mapping[str, str]
 
@@ -64,8 +68,10 @@ class SalesforceBulk2Source(EnterpriseSource):
         *,
         client: EnterpriseHttpClient | None = None,
         sleeper: Callable[[float], None] = sleep,
+        clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         super().__init__(config, auth, client=client, sleeper=sleeper)
+        self._clock = clock
 
     def discover(self) -> Mapping[str, Any]:
         """Return declared query schemas without contacting Salesforce."""
@@ -156,6 +162,40 @@ class SalesforceBulk2Source(EnterpriseSource):
                 f"Salesforce endpoint {endpoint!r} count returned an invalid total"
             )
         return CountResult.exact(count)
+
+    def get_deleted(
+        self,
+        endpoint: str,
+        *,
+        since: str | None = None,
+    ) -> Iterator[Mapping[str, Any]]:
+        """Yield Salesforce IDs deleted within its retained 30-day window."""
+        declaration = self._endpoint(endpoint)
+        _, object_name = _query_shape(declaration)
+        if declaration.request_body.get("operation") != "queryAll":
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} does not expose a deleted-record feed"
+            )
+        end = self._clock().astimezone(UTC)
+        start = end - timedelta(days=30) if since is None else _datetime_value(since, endpoint)
+        if start > end:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} received a future deleted-record cursor"
+            )
+        if end - start > timedelta(days=30):
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} deleted records are retained for 30 days"
+            )
+        response = self._send(
+            httpx.Request(
+                "GET",
+                f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}/deleted",
+                params={"start": _format_datetime(start), "end": _format_datetime(end)},
+                headers={"Accept": "application/json"},
+            ),
+            endpoint,
+        )
+        yield from _deleted_identities(response.json(), declaration)
 
     def test_connection(self) -> ConnectionStatus:
         """Authenticate against Salesforce's limits resource without reading business data."""
@@ -465,6 +505,10 @@ def _query_body(endpoint: Endpoint, since: str | None) -> dict[str, object]:
 
 
 def _datetime_literal(value: str, endpoint: str) -> str:
+    return _format_datetime(_datetime_value(value, endpoint))
+
+
+def _datetime_value(value: str, endpoint: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError as error:
@@ -475,9 +519,35 @@ def _datetime_literal(value: str, endpoint: str) -> str:
         raise EnterpriseSourceError(
             f"Endpoint {endpoint!r} received a timestamp cursor without a timezone"
         )
-    utc = parsed.astimezone(UTC)
-    milliseconds = utc.microsecond // 1000
-    return f"{utc:%Y-%m-%dT%H:%M:%S}.{milliseconds:03d}Z"
+    return parsed.astimezone(UTC)
+
+
+def _format_datetime(value: datetime) -> str:
+    milliseconds = value.microsecond // 1000
+    return f"{value:%Y-%m-%dT%H:%M:%S}.{milliseconds:03d}Z"
+
+
+def _deleted_identities(payload: object, endpoint: Endpoint) -> Iterator[Mapping[str, Any]]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("deletedRecords"), list):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} deleted-record response was invalid"
+        )
+    for record in payload["deletedRecords"]:
+        if not isinstance(record, dict):
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint.name!r} deleted-record response was invalid"
+            )
+        record_id = record.get("id")
+        deleted_date = record.get("deletedDate")
+        if (
+            not isinstance(record_id, str)
+            or not _SALESFORCE_ID.fullmatch(record_id)
+            or not isinstance(deleted_date, str)
+        ):
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint.name!r} deleted-record response was invalid"
+            )
+        yield {"Id": record_id}
 
 
 def _job_payload(payload: object, endpoint: str) -> dict[str, Any]:
