@@ -25,10 +25,10 @@ jobs:
       - run: uv sync --frozen --extra dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - name: Install exact Dander deleted-feed contract
+      - name: Install exact Dander write-back contract
         run: |
           uv pip install --python .venv/bin/python --reinstall \
-            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@27b8f65ea36fea92d8e70707333bb1aa9e3f6478"
+            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@3a9569d895656870903b33c426b69f8125f32daa"
       - run: uv run --no-sync mypy src tests
       - run: uv run --no-sync pytest
       - name: Dependency audit
@@ -51,7 +51,7 @@ jobs:
           TEMP_DIR="$(mktemp -d)"
           uv venv "$TEMP_DIR/venv"
           uv pip install --python "$TEMP_DIR/venv/bin/python" \
-            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@27b8f65ea36fea92d8e70707333bb1aa9e3f6478"
+            "dander-platform @ git+https://github.com/harrisonoconnorhover/dander.git@3a9569d895656870903b33c426b69f8125f32daa"
           uv pip install --python "$TEMP_DIR/venv/bin/python" --no-deps dist/*.whl
           cd "$TEMP_DIR"
           "$TEMP_DIR/venv/bin/python" -c \
