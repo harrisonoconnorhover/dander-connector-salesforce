@@ -2,44 +2,40 @@
 
 ## Finished
 
-- Prepared `0.3.0rc1` with independently watermarked Accounts, Contacts, Opportunities, and Users.
-- Added declared CRM schemas, `queryAll` tombstones, User active state, and personal-data guidance.
-- Added realistic fixtures and forced two-page streaming coverage for all four endpoints.
-- Preserved plugin API v1, `salesforce_bulk2`, OAuth2 JWT, and the built-in Dander fallback.
+- Added Salesforce `get_deleted` for Accounts, Contacts, and Opportunities in draft PR `#10`.
+- Added single-attempt Salesforce create in stacked draft PR `#11`.
+- Added one-record update in stacked draft PR `#12`.
+- Added repeat-safe delete outcomes in stacked draft PR `#13`.
+- Pinned capability CI to the exact unreleased Dander contract commits without changing package metadata.
 
 ## Try It
 
-```bash
-uv sync --extra dev
-uv run pytest
-```
-
-Copy `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml` into a Dander project's
-`connectors/salesforce.yaml`; keep the new `salesforce_crm` pipeline paused for initial proof.
+Review the stack in order: `#10`, `#11`, `#12`, then `#13`. Tests run with the exact Dander
+contract installed by CI; no live Salesforce tenant is needed.
 
 ## Checks
 
-- All connector tests passed: `45 passed`.
-- Ruff, formatting, and strict mypy passed.
-- The same tests passed against the local current Dander checkout.
-- Wheel/sdist build and external wheel installation/discovery passed.
-- `git diff --check` passed.
+- Exact-contract plugin suite passed: `73 passed`.
+- Ruff lint/format and strict mypy passed.
+- PRs `#10` through `#12` passed all protected CI checks; `#13` CI was started.
+- Empty, malformed, permission-shaped, identity, and ambiguous-write paths are covered.
+- No live Salesforce request or mutation occurred.
 
 ## Decisions
 
-- Use `queryAll` only for deletable CRM objects; use `query` plus `IsActive` for Users.
-- Keep inclusive cursors and let Dander SCD1 make boundary replay idempotent.
-- Keep Contact Email/Phone enabled but explicitly identify them as personal data.
+- Never retry an ambiguous create; mutations currently use one authenticated attempt.
+- Return only business identities or the closed delete outcome, not provider record bodies.
+- Do not claim upsert until a Salesforce external-ID field is explicitly declared.
 
 ## Remaining
 
-- Protected CI and review must pass before merge.
-- Do not publish the candidate until separately approved.
-- Dander's governed Salesforce models and project wiring are the next sequential PR.
-- Live multi-object acceptance remains pending.
+- Keep all provider PRs draft until Dander's capability contract is merged and published.
+- Decide how an endpoint declares its Salesforce external-ID field before implementing upsert.
+- Run one narrowly approved disposable-org mutation proof after review.
+- Do not publish, deploy, or alter the retained project from this stack.
 
 ## Review First
 
-- `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml`
-- `src/dander_connector_salesforce/plugin.py`
+- `src/dander_connector_salesforce/source.py`
 - `tests/test_source.py`
+- `.github/workflows/ci.yml`
