@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+from urllib.parse import unquote
 
 import httpx
 import pytest
@@ -14,15 +15,21 @@ from dander.ingestion import (
     CountResult,
     DeleteOutcome,
     EnterpriseSourceError,
+    RawField,
     RecordNotFound,
     SourceCapabilities,
+    SourceConfig,
 )
 
-from dander_connector_salesforce.source import SalesforceBulk2Source
-from tests.conftest import CsvResponse, FakeAuth, FakeClient
+from dander_connector_salesforce.source import (
+    SalesforceBulk2Source,
+    SalesforceExternalIdUpsertSource,
+    _query_body,
+)
+from tests.conftest import CsvResponse, FakeAuth, FakeClient, JsonResponse
 
 if TYPE_CHECKING:
-    from dander.ingestion import SourceConfig
+    from collections.abc import Mapping
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -62,6 +69,66 @@ def _request_body(request: httpx.Request) -> dict[str, object]:
     payload: object = json.loads(request.content)
     assert isinstance(payload, dict)
     return cast("dict[str, object]", payload)
+
+
+def _upsert_config(config: SourceConfig) -> SourceConfig:
+    account = config.endpoints[0]
+    request_body = dict(account.request_body)
+    request_body["upsert_external_id_field"] = "Dander_External_ID__c"
+    query = str(request_body["query"])
+    request_body["query"] = query.replace("SELECT Id,", "SELECT Id, Dander_External_ID__c,", 1)
+    configured_account = account.model_copy(
+        update={
+            "request_body": request_body,
+            "primary_key": ["Dander_External_ID__c"],
+            "raw_schema": [
+                *account.raw_schema,
+                RawField(
+                    name="Dander_External_ID__c",
+                    type="STRING",
+                    mode="REQUIRED",
+                ),
+            ],
+        }
+    )
+    return config.model_copy(update={"endpoints": [configured_account, *config.endpoints[1:]]})
+
+
+def _describe_external_id(*, external: bool = True, unique: bool = True) -> dict[str, object]:
+    return {
+        "fields": [
+            {
+                "name": "Dander_External_ID__c",
+                "externalId": external,
+                "unique": unique,
+            }
+        ]
+    }
+
+
+class _StatefulUpsertClient:
+    def __init__(self) -> None:
+        self.requests: list[httpx.Request] = []
+        self.records: dict[str, dict[str, object]] = {}
+        self.created = 0
+        self.updated = 0
+
+    def send(self, request: httpx.Request, *, stream: bool = False) -> JsonResponse:
+        assert stream is False
+        self.requests.append(request)
+        if request.method == "GET" and request.url.path.endswith("/describe"):
+            return JsonResponse(_describe_external_id())
+        assert request.method == "PATCH"
+        raw_value = request.url.raw_path.decode().rsplit("/", 1)[-1]
+        external_value = unquote(raw_value)
+        body = _request_body(request)
+        if external_value in self.records:
+            self.updated += 1
+            self.records[external_value].update(body)
+        else:
+            self.created += 1
+            self.records[external_value] = dict(body)
+        return JsonResponse({})
 
 
 @pytest.mark.parametrize(
@@ -748,3 +815,173 @@ def test_delete_rejects_invalid_identity_before_network(
         source.delete("accounts", {"Id": "invalid"})
 
     assert client.requests == []
+
+
+def test_upsert_creates_then_updates_one_external_identity_without_duplicate(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    configured = _upsert_config(config)
+    client = _StatefulUpsertClient()
+    source = SalesforceExternalIdUpsertSource(configured, auth, client=client)
+    external_value = "account/with ? reserved"
+
+    assert source.upsert(
+        "accounts",
+        {"Dander_External_ID__c": external_value, "Name": "First Name"},
+    ) == {"Dander_External_ID__c": external_value}
+    assert source.upsert(
+        "accounts",
+        {"Dander_External_ID__c": external_value, "Name": "Updated Name"},
+    ) == {"Dander_External_ID__c": external_value}
+
+    assert client.created == 1
+    assert client.updated == 1
+    assert client.records == {external_value: {"Name": "Updated Name"}}
+    patches = [request for request in client.requests if request.method == "PATCH"]
+    assert len(patches) == 2
+    assert patches[0].url.raw_path.endswith(b"account%2Fwith%20%3F%20reserved")
+    assert _request_body(patches[0]) == {"Name": "First Name"}
+
+
+def test_upsert_control_is_not_sent_to_bulk_query_jobs(config: SourceConfig) -> None:
+    configured = _upsert_config(config)
+
+    body = _query_body(configured.endpoints[0], None)
+
+    assert "upsert_external_id_field" not in body
+    assert body["operation"] == "queryAll"
+
+
+@pytest.mark.parametrize(
+    ("configure", "record", "message"),
+    [
+        (False, {"Name": "Missing control"}, "non-Id upsert_external_id_field"),
+        (True, {"Name": "Missing key"}, "requires a non-empty string"),
+        (True, {"Dander_External_ID__c": "", "Name": "Empty key"}, "non-empty string"),
+        (True, {"Dander_External_ID__c": ["not", "scalar"], "Name": "Bad"}, "non-empty string"),
+    ],
+)
+def test_upsert_rejects_missing_or_non_scalar_external_identity_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+    configure: bool,
+    record: Mapping[str, object],
+    message: str,
+) -> None:
+    selected = _upsert_config(config) if configure else config
+    client = FakeClient([])
+    source = SalesforceExternalIdUpsertSource(selected, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match=message):
+        source.upsert("accounts", record)
+
+    assert client.requests == []
+
+
+@pytest.mark.parametrize(
+    ("control", "primary_key", "query_field", "schema_field", "message"),
+    [
+        ("Id", ["Id"], True, True, "non-Id upsert_external_id_field"),
+        ("Parent.External__c", ["Parent.External__c"], True, True, "non-Id"),
+        ("Dander_External_ID__c", ["Id"], True, True, "sole primary key"),
+        ("Dander_External_ID__c", ["Dander_External_ID__c"], False, True, "selected"),
+        ("Dander_External_ID__c", ["Dander_External_ID__c"], True, False, "undeclared"),
+    ],
+)
+def test_upsert_requires_an_explicit_declared_external_identity(
+    config: SourceConfig,
+    auth: FakeAuth,
+    control: str,
+    primary_key: list[str],
+    query_field: bool,
+    schema_field: bool,
+    message: str,
+) -> None:
+    account = config.endpoints[0]
+    request_body = dict(account.request_body)
+    request_body["upsert_external_id_field"] = control
+    if query_field:
+        request_body["query"] = str(request_body["query"]).replace(
+            "SELECT Id,", f"SELECT Id, {control},", 1
+        )
+    raw_schema = list(account.raw_schema)
+    if schema_field:
+        raw_schema.append(RawField(name=control.replace(".", "_"), type="STRING"))
+    configured = config.model_copy(
+        update={
+            "endpoints": [
+                account.model_copy(
+                    update={
+                        "request_body": request_body,
+                        "primary_key": primary_key,
+                        "raw_schema": raw_schema,
+                    }
+                ),
+                *config.endpoints[1:],
+            ]
+        }
+    )
+    source = SalesforceExternalIdUpsertSource(configured, auth, client=FakeClient([]))
+
+    with pytest.raises(EnterpriseSourceError, match=message):
+        source.upsert("accounts", {control: "external-001", "Name": "Test Account"})
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        {},
+        {"fields": []},
+        _describe_external_id(external=False),
+        _describe_external_id(unique=False),
+    ],
+)
+def test_upsert_requires_verified_unique_external_id_metadata(
+    config: SourceConfig,
+    auth: FakeAuth,
+    payload: object,
+) -> None:
+    source = SalesforceExternalIdUpsertSource(
+        _upsert_config(config),
+        auth,
+        client=FakeClient([payload]),
+    )
+
+    with pytest.raises(
+        EnterpriseSourceError,
+        match="describe response was invalid|metadata was unavailable|unique External ID",
+    ):
+        source.upsert(
+            "accounts",
+            {"Dander_External_ID__c": "account-001", "Name": "Test Account"},
+        )
+
+
+@pytest.mark.parametrize("failure", ["permission", "ambiguous"])
+def test_upsert_reports_write_failure_without_retry(
+    config: SourceConfig,
+    auth: FakeAuth,
+    failure: str,
+) -> None:
+    request = httpx.Request("PATCH", "https://salesforce.example.test/upsert")
+    if failure == "permission":
+        response = httpx.Response(403, request=request)
+        write_error: httpx.HTTPError = httpx.HTTPStatusError(
+            "forbidden", request=request, response=response
+        )
+        message = "permission denied"
+    else:
+        write_error = httpx.ReadTimeout("ambiguous", request=request)
+        message = "ambiguous"
+    client = FakeClient([_describe_external_id(), write_error])
+    source = SalesforceExternalIdUpsertSource(_upsert_config(config), auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match=message):
+        source.upsert(
+            "accounts",
+            {"Dander_External_ID__c": "account-001", "Name": "Test Account"},
+        )
+
+    assert len(client.requests) == 2
