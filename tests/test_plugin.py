@@ -18,12 +18,21 @@ def test_plugin_contract_and_descriptor_are_api_v1_compatible() -> None:
     assert plugin.api_version == PLUGIN_API_VERSION
     assert plugin.engine == "salesforce_bulk2"
     assert plugin.connectors[0].connector_id == "salesforce"
-    assert plugin.connectors[0].endpoints[0].endpoint_id == "accounts"
-    assert {field.name for field in plugin.connectors[0].endpoints[0].fields} >= {
+    endpoints = {endpoint.endpoint_id: endpoint for endpoint in plugin.connectors[0].endpoints}
+    assert set(endpoints) == {"accounts", "contacts", "opportunities", "users"}
+    assert {field.name for field in endpoints["accounts"].fields} >= {
         "Id",
+        "OwnerId",
         "SystemModstamp",
         "IsDeleted",
     }
+    assert {field.name for field in endpoints["contacts"].fields} >= {"Email", "Phone"}
+    assert {field.name for field in endpoints["opportunities"].fields} >= {
+        "Amount",
+        "StageName",
+        "IsWon",
+    }
+    assert {field.name for field in endpoints["users"].fields} >= {"ProfileId", "IsActive"}
 
 
 def test_distribution_registers_exact_dander_entry_point() -> None:

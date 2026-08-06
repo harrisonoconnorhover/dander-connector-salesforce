@@ -1,4 +1,5 @@
-# Read-only Salesforce Accounts connector. Keep credential values in Dander's secret store.
+# Read-only Salesforce CRM connector. Contact Email and Phone are personal data; keep credentials
+# and extracted data within approved systems. Add custom fields to both query and raw_schema.
 name: salesforce
 engine: salesforce_bulk2
 base_url: https://YOUR_DOMAIN.my.salesforce.com/services/data/v67.0
@@ -31,8 +32,9 @@ endpoints:
     request_body:
       operation: queryAll
       query: >-
-        SELECT Id, Name, Type, Industry, AnnualRevenue, NumberOfEmployees,
-        BillingCity, BillingState, BillingCountry, CreatedDate, LastModifiedDate,
+        SELECT Id, Name, OwnerId, ParentId, Type, Industry, AnnualRevenue,
+        NumberOfEmployees, Website, Phone, BillingCity, BillingState,
+        BillingPostalCode, BillingCountry, CreatedDate, LastModifiedDate,
         SystemModstamp, IsDeleted FROM Account
       contentType: CSV
       columnDelimiter: COMMA
@@ -40,6 +42,8 @@ endpoints:
     primary_key: [Id]
     incremental_cursor: SystemModstamp
     raw_schema:
+      # Retained for schema compatibility with the original Accounts connector; Bulk CSV rows do
+      # not populate the REST-only attributes envelope.
       - name: attributes
         type: RECORD
         fields:
@@ -47,14 +51,129 @@ endpoints:
           - {name: url, type: STRING}
       - {name: Id, type: STRING, mode: REQUIRED}
       - {name: Name, type: STRING, mode: REQUIRED}
+      - {name: OwnerId, type: STRING}
+      - {name: ParentId, type: STRING}
       - {name: Type, type: STRING}
       - {name: Industry, type: STRING}
       - {name: AnnualRevenue, type: NUMERIC}
       - {name: NumberOfEmployees, type: INT64}
+      - {name: Website, type: STRING}
+      - {name: Phone, type: STRING}
       - {name: BillingCity, type: STRING}
       - {name: BillingState, type: STRING}
+      - {name: BillingPostalCode, type: STRING}
       - {name: BillingCountry, type: STRING}
       - {name: CreatedDate, type: TIMESTAMP, mode: REQUIRED}
       - {name: LastModifiedDate, type: TIMESTAMP, mode: REQUIRED}
       - {name: SystemModstamp, type: TIMESTAMP, mode: REQUIRED}
       - {name: IsDeleted, type: BOOL, mode: REQUIRED}
+
+  - name: contacts
+    path: /jobs/query
+    pagination:
+      kind: header_cursor
+      next_cursor_header: Sforce-Locator
+      cursor_param: locator
+      size_param: maxRecords
+      page_size: 10000
+      terminal_value: "null"
+    request_body:
+      operation: queryAll
+      query: >-
+        SELECT Id, AccountId, OwnerId, FirstName, LastName, Name, Email, Phone,
+        Title, Department, MailingCity, MailingState, MailingPostalCode,
+        MailingCountry, CreatedDate, LastModifiedDate, SystemModstamp, IsDeleted
+        FROM Contact
+      contentType: CSV
+      columnDelimiter: COMMA
+      lineEnding: LF
+    primary_key: [Id]
+    incremental_cursor: SystemModstamp
+    raw_schema:
+      - {name: Id, type: STRING, mode: REQUIRED}
+      - {name: AccountId, type: STRING}
+      - {name: OwnerId, type: STRING}
+      - {name: FirstName, type: STRING}
+      - {name: LastName, type: STRING, mode: REQUIRED}
+      - {name: Name, type: STRING, mode: REQUIRED}
+      - {name: Email, type: STRING}
+      - {name: Phone, type: STRING}
+      - {name: Title, type: STRING}
+      - {name: Department, type: STRING}
+      - {name: MailingCity, type: STRING}
+      - {name: MailingState, type: STRING}
+      - {name: MailingPostalCode, type: STRING}
+      - {name: MailingCountry, type: STRING}
+      - {name: CreatedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: LastModifiedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: SystemModstamp, type: TIMESTAMP, mode: REQUIRED}
+      - {name: IsDeleted, type: BOOL, mode: REQUIRED}
+
+  - name: opportunities
+    path: /jobs/query
+    pagination:
+      kind: header_cursor
+      next_cursor_header: Sforce-Locator
+      cursor_param: locator
+      size_param: maxRecords
+      page_size: 10000
+      terminal_value: "null"
+    request_body:
+      operation: queryAll
+      query: >-
+        SELECT Id, AccountId, OwnerId, Name, StageName, Amount, Probability,
+        CloseDate, Type, LeadSource, ForecastCategoryName, IsClosed, IsWon,
+        CreatedDate, LastModifiedDate, SystemModstamp, IsDeleted FROM Opportunity
+      contentType: CSV
+      columnDelimiter: COMMA
+      lineEnding: LF
+    primary_key: [Id]
+    incremental_cursor: SystemModstamp
+    raw_schema:
+      - {name: Id, type: STRING, mode: REQUIRED}
+      - {name: AccountId, type: STRING}
+      - {name: OwnerId, type: STRING}
+      - {name: Name, type: STRING, mode: REQUIRED}
+      - {name: StageName, type: STRING, mode: REQUIRED}
+      - {name: Amount, type: NUMERIC}
+      - {name: Probability, type: NUMERIC}
+      - {name: CloseDate, type: DATE, mode: REQUIRED}
+      - {name: Type, type: STRING}
+      - {name: LeadSource, type: STRING}
+      - {name: ForecastCategoryName, type: STRING}
+      - {name: IsClosed, type: BOOL, mode: REQUIRED}
+      - {name: IsWon, type: BOOL, mode: REQUIRED}
+      - {name: CreatedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: LastModifiedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: SystemModstamp, type: TIMESTAMP, mode: REQUIRED}
+      - {name: IsDeleted, type: BOOL, mode: REQUIRED}
+
+  - name: users
+    path: /jobs/query
+    pagination:
+      kind: header_cursor
+      next_cursor_header: Sforce-Locator
+      cursor_param: locator
+      size_param: maxRecords
+      page_size: 10000
+      terminal_value: "null"
+    request_body:
+      operation: query
+      query: >-
+        SELECT Id, Name, Alias, UserType, ProfileId, IsActive, CreatedDate,
+        LastModifiedDate, SystemModstamp FROM User
+      contentType: CSV
+      columnDelimiter: COMMA
+      lineEnding: LF
+    primary_key: [Id]
+    incremental_cursor: SystemModstamp
+    raw_schema:
+      - {name: Id, type: STRING, mode: REQUIRED}
+      - {name: Name, type: STRING, mode: REQUIRED}
+      - {name: Alias, type: STRING, mode: REQUIRED}
+      - {name: UserType, type: STRING, mode: REQUIRED}
+      - {name: ProfileId, type: STRING, mode: REQUIRED}
+      - {name: IsActive, type: BOOL, mode: REQUIRED}
+      - {name: CreatedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: LastModifiedDate, type: TIMESTAMP, mode: REQUIRED}
+      - {name: SystemModstamp, type: TIMESTAMP, mode: REQUIRED}

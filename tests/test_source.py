@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import httpx
@@ -21,18 +22,14 @@ from tests.conftest import CsvResponse, FakeAuth, FakeClient
 if TYPE_CHECKING:
     from dander.ingestion import SourceConfig
 
-_HEADER = (
-    "Id,Name,Type,Industry,AnnualRevenue,NumberOfEmployees,BillingCity,BillingState,"
-    "BillingCountry,CreatedDate,LastModifiedDate,SystemModstamp,IsDeleted"
-)
-_ROW_1 = (
-    "001A,Acme,Customer,Technology,125.50,42,Boston,MA,US,2026-01-01T00:00:00.000Z,"
-    "2026-08-01T11:00:00.000Z,2026-08-01T11:00:00.000Z,false"
-)
-_ROW_2 = (
-    "001B,Beta,,,,,,,US,2026-01-02T00:00:00.000Z,2026-08-01T12:00:00.000Z,"
-    "2026-08-01T12:00:00.000Z,true"
-)
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture_lines(endpoint: str) -> list[str]:
+    return (_FIXTURES / f"{endpoint}.csv").read_text(encoding="utf-8").splitlines()
+
+
+_HEADER, _ROW_1, _ROW_2 = _fixture_lines("accounts")
 
 
 def _rest_account(*, account_id: str = "001000000000001AAA") -> dict[str, object]:
@@ -40,12 +37,17 @@ def _rest_account(*, account_id: str = "001000000000001AAA") -> dict[str, object
         "attributes": {"type": "Account", "url": f"/sobjects/Account/{account_id}"},
         "Id": account_id,
         "Name": "Acme",
+        "OwnerId": "005000000000001AAA",
+        "ParentId": None,
         "Type": "Customer",
         "Industry": "Technology",
         "AnnualRevenue": 125.5,
         "NumberOfEmployees": 42,
+        "Website": "https://acme.example",
+        "Phone": "+1-617-555-0100",
         "BillingCity": "Boston",
         "BillingState": "MA",
+        "BillingPostalCode": "02110",
         "BillingCountry": "US",
         "CreatedDate": "2026-01-01T00:00:00.000Z",
         "LastModifiedDate": "2026-08-01T11:00:00.000Z",
@@ -60,11 +62,26 @@ def _request_body(request: httpx.Request) -> dict[str, object]:
     return cast("dict[str, object]", payload)
 
 
-def test_streams_pages_uses_locators_normalizes_and_cleans_up(
-    config: SourceConfig, auth: FakeAuth
+@pytest.mark.parametrize(
+    ("endpoint", "boolean_field", "second_boolean", "operation"),
+    [
+        ("accounts", "IsDeleted", True, "queryAll"),
+        ("contacts", "IsDeleted", True, "queryAll"),
+        ("opportunities", "IsDeleted", True, "queryAll"),
+        ("users", "IsActive", False, "query"),
+    ],
+)
+def test_streams_multiple_pages_for_every_endpoint_and_cleans_up(
+    config: SourceConfig,
+    auth: FakeAuth,
+    endpoint: str,
+    boolean_field: str,
+    second_boolean: bool,
+    operation: str,
 ) -> None:
-    first = CsvResponse([_HEADER, _ROW_1], locator="next-page", records=1)
-    second = CsvResponse([_HEADER, _ROW_2], locator="null", records=1)
+    header, first_row, second_row = _fixture_lines(endpoint)
+    first = CsvResponse([header, first_row], locator="next-page", records=1)
+    second = CsvResponse([header, second_row], locator="null", records=1)
     client = FakeClient(
         [
             {"id": "750-job"},
@@ -78,37 +95,89 @@ def test_streams_pages_uses_locators_normalizes_and_cleans_up(
     sleeps: list[float] = []
     source = SalesforceBulk2Source(config, auth, client=client, sleeper=sleeps.append)
 
-    rows = list(source.extract("accounts"))
+    rows = list(source.extract(endpoint))
 
-    assert [row["Id"] for row in rows] == ["001A", "001B"]
-    assert rows[0]["IsDeleted"] is False
-    assert rows[1]["IsDeleted"] is True
-    assert rows[1]["AnnualRevenue"] is None
+    assert len(rows) == 2
+    assert rows[0][boolean_field] is not second_boolean
+    assert rows[1][boolean_field] is second_boolean
+    if endpoint == "accounts":
+        assert rows[1]["AnnualRevenue"] is None
+    if endpoint == "contacts":
+        assert rows[1]["Email"] is None
     assert client.requests[3].url.params["maxRecords"] == "2"
     assert "locator" not in client.requests[3].url.params
     assert client.requests[4].url.params["locator"] == "next-page"
     assert client.requests[-1].method == "DELETE"
+    assert _request_body(client.requests[0])["operation"] == operation
     assert first.closed and second.closed
     assert sleeps == [1.0]
 
 
-def test_replay_adds_server_side_watermark_filter(config: SourceConfig, auth: FakeAuth) -> None:
+@pytest.mark.parametrize("endpoint", ["accounts", "contacts", "opportunities", "users"])
+def test_empty_endpoint_response_is_valid(
+    config: SourceConfig,
+    auth: FakeAuth,
+    endpoint: str,
+) -> None:
+    header = _fixture_lines(endpoint)[0]
     client = FakeClient(
         [
             {"id": "750-job"},
             {"state": "JobComplete"},
-            CsvResponse([_HEADER], locator="null", records=0),
+            CsvResponse([header], locator="null", records=0),
+            {},
+        ]
+    )
+
+    assert list(SalesforceBulk2Source(config, auth, client=client).extract(endpoint)) == []
+
+
+@pytest.mark.parametrize("endpoint", ["accounts", "contacts", "opportunities", "users"])
+def test_replay_adds_inclusive_server_side_watermark_filter(
+    config: SourceConfig,
+    auth: FakeAuth,
+    endpoint: str,
+) -> None:
+    header = _fixture_lines(endpoint)[0]
+    client = FakeClient(
+        [
+            {"id": "750-job"},
+            {"state": "JobComplete"},
+            CsvResponse([header], locator="null", records=0),
             {},
         ]
     )
     source = SalesforceBulk2Source(config, auth, client=client)
 
-    assert list(source.extract("accounts", since="2026-08-01T12:34:56.789123+00:00")) == []
+    assert list(source.extract(endpoint, since="2026-08-01T12:34:56.789123+00:00")) == []
 
     body = _request_body(client.requests[0])
     assert str(body["query"]).endswith("WHERE SystemModstamp >= 2026-08-01T12:34:56.789Z")
     assert "ORDER BY" not in str(body["query"])
     assert "LIMIT" not in str(body["query"])
+
+
+def test_cleanup_refusal_does_not_hide_successful_rows(
+    config: SourceConfig,
+    auth: FakeAuth,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = httpx.Request("DELETE", "https://salesforce.example.test/jobs/query/750-job")
+    response = httpx.Response(403, request=request)
+    cleanup_error = httpx.HTTPStatusError("permission denied", request=request, response=response)
+    client = FakeClient(
+        [
+            {"id": "750-job"},
+            {"state": "JobComplete"},
+            CsvResponse([_HEADER, _ROW_1], locator="null", records=1),
+            cleanup_error,
+        ]
+    )
+
+    rows = list(SalesforceBulk2Source(config, auth, client=client).extract("accounts"))
+
+    assert len(rows) == 1
+    assert "salesforce_query_job_cleanup_failed" in caplog.text
 
 
 def test_failed_job_is_reported_and_deleted(config: SourceConfig, auth: FakeAuth) -> None:

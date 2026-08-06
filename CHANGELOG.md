@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0rc1 — 2026-08-06 (alpha)
+
+- Expand the bounded Bulk API 2.0 connector to independently watermarked Accounts, Contacts,
+  Opportunities, and Users endpoints with declared schemas.
+- Preserve soft-deleted Account, Contact, and Opportunity tombstones through `queryAll`; represent
+  User deactivation with `IsActive`.
+- Add realistic multi-page fixtures and coverage for inclusive replay, sparse and empty responses,
+  typed booleans, failure handling, and query-job cleanup.
+- Allow Dander `0.6.x` while retaining plugin API v1 and the `salesforce_bulk2` engine.
+
 ## 0.2.0 — 2026-08-05 (alpha)
 
 - Promote the accepted read-capability candidate without changing connector runtime behavior.
