@@ -68,7 +68,7 @@ def test_inspect_discovers_capabilities_from_installed_plugin(tmp_path: Path) ->
     assert result.exit_code == 0, result.output
     assert "salesforce" in result.output
     assert "salesforce_bulk2" in result.output
-    assert result.output.count("yes") == 5
+    assert result.output.count("yes") == 6
 
 
 def test_check_invokes_plugin_connection_probe(

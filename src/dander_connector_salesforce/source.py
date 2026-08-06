@@ -222,6 +222,28 @@ class SalesforceBulk2Source(EnterpriseSource):
         )
         return _created_identity(response.json(), declaration)
 
+    def update(
+        self,
+        endpoint: str,
+        identity: Mapping[str, str],
+        changes: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Update one Salesforce record addressed by its declared ``Id``."""
+        declaration = self._endpoint(endpoint)
+        fields, object_name = _query_shape(declaration)
+        record_id = _record_id(identity, declaration)
+        body = _write_body(changes, declaration, fields, forbidden=_CREATE_READ_ONLY_FIELDS)
+        self._send_write_once(
+            httpx.Request(
+                "PATCH",
+                f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}/{record_id}",
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                json=body,
+            ),
+            endpoint,
+        )
+        return {"Id": record_id}
+
     def test_connection(self) -> ConnectionStatus:
         """Authenticate against Salesforce's limits resource without reading business data."""
         try:
@@ -614,6 +636,19 @@ def _write_body(
             f"Salesforce endpoint {endpoint.name!r} write received read-only field {read_only[0]!r}"
         )
     return dict(values)
+
+
+def _record_id(identity: Mapping[str, str], endpoint: Endpoint) -> str:
+    if endpoint.primary_key != ["Id"] or set(identity) != {"Id"}:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} write requires identity field 'Id'"
+        )
+    record_id = identity["Id"]
+    if not _SALESFORCE_ID.fullmatch(record_id):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} write received an invalid Id"
+        )
+    return record_id
 
 
 def _created_identity(payload: object, endpoint: Endpoint) -> Mapping[str, Any]:
