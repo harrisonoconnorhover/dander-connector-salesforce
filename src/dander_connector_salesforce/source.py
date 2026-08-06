@@ -8,6 +8,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from time import sleep
 from typing import TYPE_CHECKING, Any, Protocol, cast
+from urllib.parse import quote
 
 import httpx
 from dander.ingestion import (
@@ -38,6 +39,7 @@ _SOQL_SHAPE = re.compile(
     re.I | re.S,
 )
 _SOQL_FIELD = re.compile(r"^[A-Za-z][A-Za-z0-9_.]*$")
+_SALESFORCE_FIELD = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _SALESFORCE_ID = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
 _CREATE_READ_ONLY_FIELDS = frozenset(
     {"Id", "CreatedDate", "LastModifiedDate", "SystemModstamp", "IsDeleted"}
@@ -466,6 +468,60 @@ class SalesforceBulk2Source(EnterpriseSource):
         return max(1.0, 1 / self.config.rate_limit.requests_per_second)
 
 
+class SalesforceExternalIdUpsertSource(SalesforceBulk2Source):
+    """Salesforce source with explicitly configured, provider-verified upsert support."""
+
+    def upsert(self, endpoint: str, record: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Create or update one record through a verified unique Salesforce External ID."""
+        declaration = self._endpoint(endpoint)
+        external_field = _upsert_external_id_name(declaration)
+        fields, object_name = _query_shape(declaration)
+        _validate_upsert_external_id_declaration(declaration, fields, external_field)
+        external_value = record.get(external_field)
+        if not isinstance(external_value, str) or not external_value:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} upsert requires a non-empty string "
+                f"in field {external_field!r}"
+            )
+        values = dict(record)
+        del values[external_field]
+        body = _write_body(values, declaration, fields, forbidden=_CREATE_READ_ONLY_FIELDS)
+        self._require_external_id_metadata(declaration, object_name, external_field)
+        encoded_value = quote(external_value, safe="")
+        self._send_write_once(
+            httpx.Request(
+                "PATCH",
+                f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}/"
+                f"{external_field}/{encoded_value}",
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                json=body,
+            ),
+            endpoint,
+        )
+        return {external_field: external_value}
+
+    def _require_external_id_metadata(
+        self,
+        endpoint: Endpoint,
+        object_name: str,
+        external_field: str,
+    ) -> None:
+        response = self._send(
+            httpx.Request(
+                "GET",
+                f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}/describe",
+                headers={"Accept": "application/json"},
+            ),
+            endpoint.name,
+        )
+        _validate_external_id_metadata(response.json(), endpoint, external_field)
+
+
+def has_external_id_upsert(config: SourceConfig) -> bool:
+    """Return whether configuration explicitly opts at least one endpoint into upsert."""
+    return any("upsert_external_id_field" in endpoint.request_body for endpoint in config.endpoints)
+
+
 def _validate_endpoint(endpoint: Endpoint) -> HeaderCursorPagination:
     pagination = endpoint.pagination
     if not isinstance(pagination, HeaderCursorPagination):
@@ -586,6 +642,7 @@ def _valid_limits_payload(payload: object) -> bool:
 
 def _query_body(endpoint: Endpoint, since: str | None) -> dict[str, object]:
     body: dict[str, object] = dict(endpoint.request_body)
+    body.pop("upsert_external_id_field", None)
     query = cast("str", body["query"]).strip()
     if since is not None:
         if endpoint.incremental_cursor is None:
@@ -699,6 +756,61 @@ def _created_identity(payload: object, endpoint: Endpoint) -> Mapping[str, Any]:
             f"Salesforce endpoint {endpoint.name!r} create response was invalid"
         )
     return {"Id": record_id}
+
+
+def _upsert_external_id_name(endpoint: Endpoint) -> str:
+    external_field = endpoint.request_body.get("upsert_external_id_field")
+    if (
+        not isinstance(external_field, str)
+        or not _SALESFORCE_FIELD.fullmatch(external_field)
+        or external_field == "Id"
+    ):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} requires a non-Id upsert_external_id_field"
+        )
+    if endpoint.primary_key != [external_field]:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} upsert External ID must be its sole primary key"
+        )
+    return external_field
+
+
+def _validate_upsert_external_id_declaration(
+    endpoint: Endpoint,
+    fields: tuple[str, ...],
+    external_field: str,
+) -> None:
+    declared = {field.name for field in endpoint.raw_schema}
+    if external_field not in fields or external_field not in declared:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} upsert External ID must be selected and "
+            "raw-schema declared"
+        )
+
+
+def _validate_external_id_metadata(
+    payload: object,
+    endpoint: Endpoint,
+    external_field: str,
+) -> None:
+    if not isinstance(payload, dict) or not isinstance(payload.get("fields"), list):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} describe response was invalid"
+        )
+    matches = [
+        field
+        for field in payload["fields"]
+        if isinstance(field, dict) and field.get("name") == external_field
+    ]
+    if len(matches) != 1:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} External ID metadata was unavailable"
+        )
+    metadata = matches[0]
+    if metadata.get("externalId") is not True or metadata.get("unique") is not True:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} upsert field must be a unique External ID"
+        )
 
 
 def _job_payload(payload: object, endpoint: str) -> dict[str, Any]:
