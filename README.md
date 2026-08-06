@@ -3,50 +3,85 @@
 First-party Salesforce Bulk API 2.0 connector plugin for
 [Dander](https://github.com/harrisonoconnorhover/dander).
 
-> **Alpha:** pin both Dander and this plugin exactly. The plugin is read-only and currently
-> supports one bounded, server-filtered Accounts `queryAll` pipeline.
+> **Alpha:** pin both Dander and this plugin exactly. The connector is read-only. Contact Email and
+> Phone are enabled by default and are personal data; deploy them only into an approved project.
 
-## Install
+## What it reads
 
-Declare the exact plugin version in `dander.yaml`:
+The four endpoints stream bounded CSV result pages and commit separate `SystemModstamp` watermarks:
+
+| Endpoint | Raw relation | Salesforce operation | Deletion state |
+| --- | --- | --- | --- |
+| `accounts` | `raw.salesforce_accounts` | `queryAll` | `IsDeleted` |
+| `contacts` | `raw.salesforce_contacts` | `queryAll` | `IsDeleted` |
+| `opportunities` | `raw.salesforce_opportunities` | `queryAll` | `IsDeleted` |
+| `users` | `raw.salesforce_users` | `query` | `IsActive` |
+
+Inclusive `SystemModstamp >= cursor` filters deliberately reread the cursor boundary. Dander's
+SCD1 writer makes that replay duplicate-free. Soft-deleted CRM records remain as tombstones rather
+than being physically deleted from BigQuery, and inactive owners remain available for historical
+joins. Salesforce records that have already been hard-deleted or purged cannot be recovered by
+this connector.
+
+## Install and configure
+
+Declare the exact candidate version in `dander.yaml`:
 
 ```yaml
+version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.2.0
+    version: 0.3.0rc1
+pipelines:
+  salesforce_crm:
+    source: salesforce
+    models: []
+    build_models: false
+    schedule: "0 7 * * *"
+    time_zone: America/New_York
+    paused: true
+    secrets:
+      SALESFORCE_EXTERNAL_CLIENT_APP_ID: salesforce-client-id
+      SALESFORCE_EXTERNAL_CLIENT_APP_PRIVATE_KEY: salesforce-private-key
 ```
 
-Then install exactly what the manifest declares:
+Existing installations may keep their current pipeline ID to avoid replacing Cloud Run and
+Scheduler resources. Install the manifest's exact package pin:
 
 ```console
 dander plugins install
 ```
 
 Copy [`salesforce_jwt.example.yaml`](src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml)
-into the project's `connectors/` directory, replace the public org settings, and keep the
-External Client App ID and RSA private key in Dander's configured secret store.
+into `connectors/salesforce.yaml`. Replace only the public org URL, OAuth subject, and login-domain
+settings. Store the External Client App ID and RSA private key in Dander's secret store; never put
+credential values in YAML.
+
+The Salesforce integration user needs API access plus read access to each selected object and
+field. Custom fields are opt-in: add each field to both the endpoint's SOQL `SELECT` and its
+`raw_schema`. This explicit declaration prevents undeclared source drift from entering BigQuery.
 
 ## Runtime contract
 
 - Engine: `salesforce_bulk2`
-- Authentication: Dander core's `oauth2_jwt` strategy
+- Authentication: Dander core's cloud-neutral `oauth2_jwt` strategy
 - API: Salesforce Bulk API 2.0 Query
-- Publication: Dander's existing SCD1 writer
-- Cursor: `SystemModstamp`, applied as a server-side SOQL filter on replay
-- Memory: CSV result pages are streamed and bounded by `maxRecords`
-- Optional reads: exact aggregate count and one Account lookup by validated Salesforce `Id`
+- Publication: Dander's idempotent SCD1 writer
+- Memory: CSV pages are streamed and bounded by Salesforce `maxRecords`
+- Replay: inclusive server-side `SystemModstamp` filters
+- Optional reads: exact aggregate count and one-record lookup by validated Salesforce `Id`
 - Connection check: authenticated REST `/limits` probe that returns no business records
 
-With Dander `0.5.0` or newer, inspect and check an installed pipeline without running ingestion:
+With Dander `0.5.0` or newer, inspect and check an installed pipeline without ingestion:
 
 ```console
-dander connector inspect PIPELINE_ID
-dander connector check PIPELINE_ID
+dander connector inspect salesforce_crm
+dander connector check salesforce_crm
 ```
 
-Dander retains its deprecated built-in Salesforce fallback for compatibility. When this plugin is
-explicitly pinned, the plugin implementation takes precedence.
+Dander retains its deprecated built-in Salesforce fallback for compatibility. An explicitly pinned
+plugin takes precedence.
 
 ## Development
 

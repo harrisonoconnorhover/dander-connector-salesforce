@@ -2,11 +2,10 @@
 
 ## Finished
 
-- Published stable Salesforce connector `0.2.0` from its accepted live-tested candidate.
-- Kept bounded Bulk API 2.0 extraction and added record-free connection testing, exact Account
-  counts, and validated targeted Account lookup.
-- Installed the public plugin source-free in the retained Dander project with an exact manifest
-  pin and Dander `0.5.x` compatibility.
+- Prepared `0.3.0rc1` with independently watermarked Accounts, Contacts, Opportunities, and Users.
+- Added declared CRM schemas, `queryAll` tombstones, User active state, and personal-data guidance.
+- Added realistic fixtures and forced two-page streaming coverage for all four endpoints.
+- Preserved plugin API v1, `salesforce_bulk2`, OAuth2 JWT, and the built-in Dander fallback.
 
 ## Try It
 
@@ -15,24 +14,32 @@ uv sync --extra dev
 uv run pytest
 ```
 
+Copy `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml` into a Dander project's
+`connectors/salesforce.yaml`; keep the new `salesforce_crm` pipeline paused for initial proof.
+
 ## Checks
 
-- Ruff, formatting, strict mypy, and all 34 tests passed.
-- Live acceptance covered connection, count, targeted lookup, ingestion, replay, cursor/lease
-  safety, staging cleanup, scheduler restoration, and Terraform no-drift.
-- Local Markdown links and `git diff --check` passed.
+- All connector tests passed: `45 passed`.
+- Ruff, formatting, and strict mypy passed.
+- The same tests passed against the local current Dander checkout.
+- Wheel/sdist build and external wheel installation/discovery passed.
+- `git diff --check` passed.
 
 ## Decisions
 
-- Bulk API 2.0 remains the extraction path; small optional reads use Salesforce REST.
-- Provider mutations, deleted-record consumption, and automatic preflight remain out of scope.
+- Use `queryAll` only for deletable CRM objects; use `query` plus `IsActive` for Users.
+- Keep inclusive cursors and let Dander SCD1 make boundary replay idempotent.
+- Keep Contact Email/Phone enabled but explicitly identify them as personal data.
 
 ## Remaining
 
-- Continue retained-project soak observation on the public `0.2.0` plugin.
+- Protected CI and review must pass before merge.
+- Do not publish the candidate until separately approved.
+- Dander's governed Salesforce models and project wiring are the next sequential PR.
+- Live multi-object acceptance remains pending.
 
 ## Review First
 
-- `README.md`
-- `src/dander_connector_salesforce/source.py`
+- `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml`
+- `src/dander_connector_salesforce/plugin.py`
 - `tests/test_source.py`

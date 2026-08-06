@@ -40,8 +40,8 @@ def config() -> SourceConfig:
     )
     result = load_source_config(path)
     result.base_url = "https://salesforce.example.test/services/data/v67.0"
-    pagination = result.endpoints[0].pagination
-    result.endpoints[0].pagination = pagination.model_copy(update={"page_size": 2})
+    for endpoint in result.endpoints:
+        endpoint.pagination = endpoint.pagination.model_copy(update={"page_size": 2})
     return result
 
 
