@@ -38,6 +38,9 @@ _SOQL_SHAPE = re.compile(
 )
 _SOQL_FIELD = re.compile(r"^[A-Za-z][A-Za-z0-9_.]*$")
 _SALESFORCE_ID = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
+_CREATE_READ_ONLY_FIELDS = frozenset(
+    {"Id", "CreatedDate", "LastModifiedDate", "SystemModstamp", "IsDeleted"}
+)
 
 
 def _utc_now() -> datetime:
@@ -56,6 +59,12 @@ class _StreamingResponse(Protocol):
 
 class _StreamingHttpClient(Protocol):
     def send(self, request: httpx.Request, *, stream: bool) -> _StreamingResponse: ...
+
+
+class _JsonResponse(Protocol):
+    def raise_for_status(self) -> object: ...
+
+    def json(self) -> object: ...
 
 
 class SalesforceBulk2Source(EnterpriseSource):
@@ -196,6 +205,22 @@ class SalesforceBulk2Source(EnterpriseSource):
             endpoint,
         )
         yield from _deleted_identities(response.json(), declaration)
+
+    def create(self, endpoint: str, record: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Create one Salesforce record without retrying an ambiguous write."""
+        declaration = self._endpoint(endpoint)
+        fields, object_name = _query_shape(declaration)
+        body = _write_body(record, declaration, fields, forbidden=_CREATE_READ_ONLY_FIELDS)
+        response = self._send_write_once(
+            httpx.Request(
+                "POST",
+                f"{self.config.base_url.rstrip('/')}/sobjects/{object_name}",
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                json=body,
+            ),
+            endpoint,
+        )
+        return _created_identity(response.json(), declaration)
 
     def test_connection(self) -> ConnectionStatus:
         """Authenticate against Salesforce's limits resource without reading business data."""
@@ -353,6 +378,25 @@ class SalesforceBulk2Source(EnterpriseSource):
             multiplier = 2**attempt if policy.backoff.value == "exponential" else 1
             self._sleep(multiplier / policy.requests_per_second)
         raise AssertionError("bounded streaming retry loop did not return or raise")
+
+    def _send_write_once(self, request: httpx.Request, endpoint: str) -> _JsonResponse:
+        """Send one mutation exactly once; an ambiguous failure is returned to the operator."""
+        try:
+            response = self._client.send(self._auth.apply(request))
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            reason = {401: "authentication failed", 403: "permission denied"}.get(
+                status, "write was rejected"
+            )
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} {reason} (HTTP {status}); write was not retried"
+            ) from error
+        except httpx.HTTPError as error:
+            raise EnterpriseSourceError(
+                f"Salesforce endpoint {endpoint!r} write result is ambiguous; write was not retried"
+            ) from error
 
     def _delete_job(self, job_url: str, job_id: str, endpoint: str) -> None:
         try:
@@ -548,6 +592,47 @@ def _deleted_identities(payload: object, endpoint: Endpoint) -> Iterator[Mapping
                 f"Salesforce endpoint {endpoint.name!r} deleted-record response was invalid"
             )
         yield {"Id": record_id}
+
+
+def _write_body(
+    values: Mapping[str, Any],
+    endpoint: Endpoint,
+    fields: tuple[str, ...],
+    *,
+    forbidden: frozenset[str],
+) -> dict[str, Any]:
+    if not values:
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} write requires at least one field"
+        )
+    if unknown := sorted(set(values) - set(fields)):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} write received undeclared field {unknown[0]!r}"
+        )
+    if read_only := sorted(set(values) & forbidden):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} write received read-only field {read_only[0]!r}"
+        )
+    return dict(values)
+
+
+def _created_identity(payload: object, endpoint: Endpoint) -> Mapping[str, Any]:
+    if not isinstance(payload, dict):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} create response was invalid"
+        )
+    record_id = payload.get("id")
+    errors = payload.get("errors")
+    if (
+        payload.get("success") is not True
+        or not isinstance(record_id, str)
+        or not _SALESFORCE_ID.fullmatch(record_id)
+        or errors not in (None, [])
+    ):
+        raise EnterpriseSourceError(
+            f"Salesforce endpoint {endpoint.name!r} create response was invalid"
+        )
+    return {"Id": record_id}
 
 
 def _job_payload(payload: object, endpoint: str) -> dict[str, Any]:
