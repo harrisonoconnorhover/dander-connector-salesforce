@@ -4,7 +4,7 @@
 
 - Merged Salesforce `get_deleted` through PR `#10` and create through PR `#15`.
 - Merged one-record update through PR `#16` and repeat-safe delete through PR `#17`.
-- Added opt-in, metadata-verified External ID upsert as the final focused provider slice.
+- Merged opt-in, metadata-verified External ID upsert through PR `#18`.
 - Use public `dander-platform>=0.6.0rc1,<0.7` throughout CI and package metadata.
 - Kept all provider writes explicit and single-attempt.
 
@@ -17,6 +17,7 @@ Salesforce metadata marks as both External ID and Unique.
 
 - Published-contract plugin suite passed: `93 passed`.
 - Ruff lint/format and strict mypy passed.
+- PRs `#10` and `#15` through `#18` passed all protected CI checks.
 - The plugin wheel installed with public Dander in a clean environment outside both repositories.
 - Stateful tests cover create-versus-update upsert behavior and reserved-character path encoding.
 - Empty, malformed, permission-shaped, identity, metadata, and ambiguous-write paths are covered.
@@ -30,7 +31,6 @@ Salesforce metadata marks as both External ID and Unique.
 
 ## Remaining
 
-- Merge the upsert slice through protected checks.
 - Publish the approved connector candidate after the complete stack is green.
 - Run the approved disposable-org mutation proof before any retained-project change.
 
