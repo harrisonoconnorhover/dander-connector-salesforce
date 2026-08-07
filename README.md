@@ -36,7 +36,7 @@ version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.3.0
+    version: 0.3.1
 pipelines:
   salesforce_crm:
     source: salesforce
