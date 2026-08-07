@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -295,6 +296,7 @@ def test_read_capabilities_are_structurally_discovered(
     assert SourceCapabilities(source).supported_operations == frozenset(
         {
             ConnectorOperation.COUNT,
+            ConnectorOperation.GET_DELETED,
             ConnectorOperation.GET_SINGLE_OBJECT,
             ConnectorOperation.TEST_CONNECTION,
         }
@@ -461,3 +463,115 @@ def test_get_single_object_rejects_invalid_identity_before_network(
 
     assert not any(value in str(error.value) for value in identity.values())
     assert client.requests == []
+
+
+def test_get_deleted_returns_business_keys_and_forwards_window(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient(
+        [
+            {
+                "earliestDateAvailable": "2026-07-22T12:00:00.000+0000",
+                "latestDateCovered": "2026-08-06T12:00:00.000+0000",
+                "deletedRecords": [
+                    {
+                        "id": "001000000000001AAA",
+                        "deletedDate": "2026-08-02T10:30:00.000+0000",
+                    },
+                    {
+                        "id": "001000000000002AAA",
+                        "deletedDate": "2026-08-03T10:30:00.000+0000",
+                    },
+                ],
+            }
+        ]
+    )
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=client,
+        clock=lambda: datetime(2026, 8, 6, 12, tzinfo=UTC),
+    )
+
+    assert list(source.get_deleted("accounts", since="2026-08-01T00:00:00Z")) == [
+        {"Id": "001000000000001AAA"},
+        {"Id": "001000000000002AAA"},
+    ]
+    request = client.requests[0]
+    assert request.method == "GET"
+    assert request.url.path.endswith("/sobjects/Account/deleted")
+    assert request.url.params["start"] == "2026-08-01T00:00:00.000Z"
+    assert request.url.params["end"] == "2026-08-06T12:00:00.000Z"
+
+
+def test_get_deleted_defaults_to_salesforce_retention_window(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([{"deletedRecords": []}])
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=client,
+        clock=lambda: datetime(2026, 8, 6, 12, tzinfo=UTC),
+    )
+
+    assert list(source.get_deleted("contacts")) == []
+    assert client.requests[0].url.params["start"] == "2026-07-22T12:00:00.000Z"
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "since", "message"),
+    [
+        ("users", None, "does not expose a deleted-record feed"),
+        ("accounts", "2026-07-21T00:00:00Z", "retained for 15 days"),
+        ("accounts", "2026-08-06T12:00:00Z", "must precede the end"),
+        ("accounts", "2026-08-07T00:00:00Z", "must precede the end"),
+    ],
+)
+def test_get_deleted_rejects_unsupported_endpoint_or_window_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+    endpoint: str,
+    since: str | None,
+    message: str,
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=client,
+        clock=lambda: datetime(2026, 8, 6, 12, tzinfo=UTC),
+    )
+
+    with pytest.raises(EnterpriseSourceError, match=message):
+        list(source.get_deleted(endpoint, since=since))
+
+    assert client.requests == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        {},
+        {"deletedRecords": [None]},
+        {"deletedRecords": [{"id": "invalid", "deletedDate": "2026-08-02T00:00:00Z"}]},
+        {"deletedRecords": [{"id": "001000000000001AAA"}]},
+    ],
+)
+def test_get_deleted_rejects_malformed_response(
+    config: SourceConfig,
+    auth: FakeAuth,
+    payload: object,
+) -> None:
+    source = SalesforceBulk2Source(
+        config,
+        auth,
+        client=FakeClient([payload]),
+        clock=lambda: datetime(2026, 8, 6, 12, tzinfo=UTC),
+    )
+
+    with pytest.raises(EnterpriseSourceError, match="deleted-record response was invalid"):
+        list(source.get_deleted("opportunities", since="2026-08-01T00:00:00Z"))
