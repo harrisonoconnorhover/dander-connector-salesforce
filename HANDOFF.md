@@ -6,6 +6,7 @@
 - Added declared CRM schemas, `queryAll` tombstones, User active state, and personal-data guidance.
 - Added realistic fixtures and forced two-page streaming coverage for all four endpoints.
 - Preserved plugin API v1, `salesforce_bulk2`, OAuth2 JWT, and the built-in Dander fallback.
+- Replaced the temporary Git commit dependency with public `dander-platform>=0.6.0rc1,<0.7`.
 
 ## Try It
 
@@ -19,9 +20,9 @@ Copy `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml` int
 
 ## Checks
 
-- All connector tests passed: `45 passed`.
+- All connector tests passed: `56 passed`.
 - Ruff, formatting, and strict mypy passed.
-- The same tests passed against the local current Dander checkout.
+- The same tests passed against the published Dander candidate dependency.
 - Wheel/sdist build and external wheel installation/discovery passed.
 - `git diff --check` passed.
 
@@ -34,7 +35,7 @@ Copy `src/dander_connector_salesforce/templates/salesforce_jwt.example.yaml` int
 ## Remaining
 
 - Protected CI and review must pass before merge.
-- Do not publish the candidate until separately approved.
+- Merge the provider capability PRs before publishing the approved candidate.
 - Dander's governed Salesforce models and project wiring are the next sequential PR.
 - Live multi-object acceptance remains pending.
 
