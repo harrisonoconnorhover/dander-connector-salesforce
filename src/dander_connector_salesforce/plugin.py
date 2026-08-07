@@ -12,7 +12,11 @@ from dander.plugins import (
     ConnectorPlugin,
 )
 
-from dander_connector_salesforce.source import SalesforceBulk2Source
+from dander_connector_salesforce.source import (
+    SalesforceBulk2Source,
+    SalesforceExternalIdUpsertSource,
+    has_external_id_upsert,
+)
 
 if TYPE_CHECKING:
     from dander.ingestion import Source, SourceConfig
@@ -100,6 +104,8 @@ _ENDPOINT_NAMES = {
 
 
 def _source_factory(config: SourceConfig, auth: AuthStrategy) -> Source:
+    if has_external_id_upsert(config):
+        return SalesforceExternalIdUpsertSource(config, auth)
     return SalesforceBulk2Source(config, auth)
 
 

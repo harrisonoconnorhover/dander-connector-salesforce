@@ -3,8 +3,9 @@
 First-party Salesforce Bulk API 2.0 connector plugin for
 [Dander](https://github.com/harrisonoconnorhover/dander).
 
-> **Alpha:** pin both Dander and this plugin exactly. The connector is read-only. Contact Email and
-> Phone are enabled by default and are personal data; deploy them only into an approved project.
+> **Alpha:** pin both Dander and this plugin exactly. Scheduled ingestion is read-only. Explicit
+> connector write commands are experimental and mutate Salesforce. Contact Email and Phone are
+> enabled by default and are personal data; deploy them only into an approved project.
 
 ## What it reads
 
@@ -22,6 +23,9 @@ SCD1 writer makes that replay duplicate-free. Soft-deleted CRM records remain as
 than being physically deleted from BigQuery, and inactive owners remain available for historical
 joins. Salesforce records that have already been hard-deleted or purged cannot be recovered by
 this connector.
+
+Salesforce's deleted-record feed retains at most 15 days. Dander rejects a wider or non-forward
+window instead of silently presenting it as complete.
 
 ## Install and configure
 
@@ -71,6 +75,8 @@ field. Custom fields are opt-in: add each field to both the endpoint's SOQL `SEL
 - Memory: CSV pages are streamed and bounded by Salesforce `maxRecords`
 - Replay: inclusive server-side `SystemModstamp` filters
 - Optional reads: exact aggregate count and one-record lookup by validated Salesforce `Id`
+- Optional deleted feed: Accounts, Contacts, and Opportunities within Salesforce's 15-day window
+- Explicit writes: create, update, and delete by validated Salesforce `Id`
 - Connection check: authenticated REST `/limits` probe that returns no business records
 
 With Dander `0.5.0` or newer, inspect and check an installed pipeline without ingestion:
@@ -82,6 +88,40 @@ dander connector check salesforce_crm
 
 Dander retains its deprecated built-in Salesforce fallback for compatibility. An explicitly pinned
 plugin takes precedence.
+
+## Experimental write-back
+
+Write-back is never invoked by `dander run`. It requires the separate connector command, local JSON
+input files, and an explicit `--confirm-write` acknowledgement:
+
+```console
+dander connector write salesforce_crm accounts create --record new-account.json --confirm-write
+dander connector write salesforce_crm accounts update --identity account-id.json \
+  --changes account-changes.json --confirm-write
+dander connector write salesforce_crm accounts delete --identity account-id.json --confirm-write
+```
+
+Upsert is disabled by default. To enable it for a custom endpoint, declare one Salesforce External
+ID field as the endpoint's sole primary key, include it in both the SOQL selection and `raw_schema`,
+and name it in `request_body`:
+
+```yaml
+primary_key: [Dander_External_ID__c]
+request_body:
+  operation: queryAll
+  query: SELECT Dander_External_ID__c, Name FROM Account
+  upsert_external_id_field: Dander_External_ID__c
+raw_schema:
+  - {name: Dander_External_ID__c, type: STRING, mode: REQUIRED}
+  - {name: Name, type: STRING, mode: REQUIRED}
+```
+
+Before each upsert, the connector checks Salesforce metadata and refuses fields that are not marked
+both External ID and Unique. External-ID values are encoded as one URL path segment. The local
+control field is not sent in Bulk query job bodies.
+
+These write capabilities require public `dander-platform>=0.6.0rc1,<0.7`. Provider writes remain
+explicit CLI operations and are not invoked by normal scheduled ingestion.
 
 ## Development
 

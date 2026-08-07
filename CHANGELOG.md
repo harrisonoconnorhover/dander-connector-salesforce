@@ -10,6 +10,8 @@
   User deactivation with `IsActive`.
 - Add realistic multi-page fixtures and coverage for inclusive replay, sparse and empty responses,
   typed booleans, failure handling, and query-job cleanup.
+- Add explicit deleted-record lookup plus single-attempt create, update, delete, and metadata-verified
+  External ID upsert capabilities for operator-invoked write-back.
 - Allow Dander `0.6.x` while retaining plugin API v1 and the `salesforce_bulk2` engine.
 
 ## 0.2.0 — 2026-08-05 (alpha)
