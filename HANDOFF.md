@@ -2,40 +2,38 @@
 
 ## Finished
 
-- Merged Salesforce `get_deleted` through PR `#10` and create through PR `#15`.
-- Merged one-record update through PR `#16` and repeat-safe delete through PR `#17`.
-- Merged opt-in, metadata-verified External ID upsert through PR `#18`.
-- Use public `dander-platform>=0.6.0rc1,<0.7` throughout CI and package metadata.
-- Kept all provider writes explicit and single-attempt.
+- Published `dander-connector-salesforce==0.3.0rc1` against public `dander-platform==0.6.0rc1`.
+- Deployed their source-free shared image to the isolated proof project with both schedules paused.
+- Proved live create, update/read-back, unique External ID upsert, delete, repeat-delete, and `get_deleted` against the disposable Salesforce org.
+- Completed a hosted `queryAll` graph run that retained both deleted proof Accounts as tombstones.
+- Left the retained project unchanged.
 
 ## Try It
 
-Run `uv sync --extra dev && uv run pytest`. Upsert requires an endpoint-declared field that
-Salesforce metadata marks as both External ID and Unique.
+Install the exact candidates outside both repositories, then run `dander connector check salesforce`
+from a generated project with Salesforce secret references configured.
 
 ## Checks
 
-- Published-contract plugin suite passed: `93 passed`.
-- Ruff lint/format and strict mypy passed.
-- PRs `#10` and `#15` through `#18` passed all protected CI checks.
-- The plugin wheel installed with public Dander in a clean environment outside both repositories.
-- Stateful tests cover create-versus-update upsert behavior and reserved-character path encoding.
-- Empty, malformed, permission-shaped, identity, metadata, and ambiguous-write paths are covered.
-- No live Salesforce request or mutation occurred.
+- Live connector check passed; create/update read-back and two-call upsert produced the expected state.
+- Both deletes returned `deleted`; the repeat returned `not_found`; the delayed deleted feed returned both IDs.
+- Hosted Salesforce run `651d73a3bc93496499ff6fbf8b1f58c2` succeeded with 3 extracted and 3 affected rows.
+- Both tombstones reached `raw.salesforce_accounts`; the graph target contained 16 rows.
+- Leases released, no staging tables remained, both schedules stayed paused, and Terraform reported `No changes.`
 
 ## Decisions
 
-- Never retry an ambiguous create; mutations currently use one authenticated attempt.
-- Return only business identities or the closed delete outcome, not provider record bodies.
-- Enable upsert only for an explicitly declared, provider-verified unique External ID field.
+- Keep `Dander_External_ID__c` in the disposable org for later acceptance; it is unique and External ID metadata-verified.
+- Keep write-back opt-in, explicitly confirmed, and single-attempt.
+- Treat the proof as isolated acceptance only; no retained-project migration occurred.
 
 ## Remaining
 
-- Publish the approved connector candidate after the complete stack is green.
-- Run the approved disposable-org mutation proof before any retained-project change.
+- Decide whether to promote the accepted Dander and Salesforce candidates to stable releases.
+- Migrate the retained project only through its separately reviewed plan and smoke sequence.
 
 ## Review First
 
+- `docs/live-writeback-acceptance.md`
 - `src/dander_connector_salesforce/source.py`
 - `tests/test_source.py`
-- `src/dander_connector_salesforce/plugin.py`
