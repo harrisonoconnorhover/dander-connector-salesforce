@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,12 +33,12 @@ def _project(tmp_path: Path) -> tuple[Path, Path]:
     )
     manifest = tmp_path / "dander.yaml"
     manifest.write_text(
-        """
+        f"""
 version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.3.0
+    version: {version("dander-connector-salesforce")}
 pipelines:
   salesforce_accounts:
     source: salesforce

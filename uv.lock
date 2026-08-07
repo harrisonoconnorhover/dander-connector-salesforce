@@ -451,7 +451,7 @@ wheels = [
 
 [[package]]
 name = "dander-connector-salesforce"
-version = "0.3.0"
+version = "0.3.1rc1"
 source = { editable = "." }
 dependencies = [
     { name = "dander-platform" },
@@ -467,7 +467,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dander-platform", specifier = ">=0.6.0rc1,<0.7" },
+    { name = "dander-platform", specifier = ">=0.6.0rc1,<0.8" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
@@ -477,7 +477,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "dander-platform"
-version = "0.6.0rc1"
+version = "0.7.0rc1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dlt", extra = ["bigquery"] },
@@ -497,9 +497,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/2a/56c8ed34e106568ff2c3dccdbd8de69409c4f5b1ccb6f629ddf8b67b20cc/dander_platform-0.6.0rc1.tar.gz", hash = "sha256:97714a69cff43e67befb888699a0033ce297462d23bb317bda50fe81d3f0e129", size = 551963, upload-time = "2026-08-07T02:12:35.455Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/a7/32675b1d268ea86a96f73ee7f75cc7a2884b8179b0d776a7ced21afd12b1/dander_platform-0.7.0rc1.tar.gz", hash = "sha256:6ce161f24ef3882d37fa62b838938a5638d233c26cad27d55db0d457d26b507f", size = 576707, upload-time = "2026-08-07T10:58:42.42Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/dc/55f0146c385cc5e8697643a0642044b88ebb7774dd852ce025a67f06f146/dander_platform-0.6.0rc1-py3-none-any.whl", hash = "sha256:3c7c40f03db7efdeecad0ed3b38653afc799aa159b6c7c2622a5c72f7964fdcf", size = 338148, upload-time = "2026-08-07T02:12:34.067Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/13/a07ba45dbaa3f162a18d4a88148eb32eb24f64b1cff1a6ea354ca7e524da/dander_platform-0.7.0rc1-py3-none-any.whl", hash = "sha256:eb4b6dd83834279912bdef948447834026b67b03ff3820a84923f045953422b9", size = 357093, upload-time = "2026-08-07T10:58:40.403Z" },
 ]
 
 [[package]]
