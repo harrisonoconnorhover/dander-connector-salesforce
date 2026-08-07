@@ -2,38 +2,33 @@
 
 ## Finished
 
-- Prepared stable `dander-connector-salesforce==0.3.0` from the accepted `0.3.0rc1` runtime.
-- Kept the four Salesforce endpoints, plugin API v1, and `salesforce_bulk2` behavior unchanged.
-- Recorded the isolated hosted proof against public `dander-platform==0.6.0rc2`.
-- Left the retained project and Salesforce source code unchanged.
+- Prepared `dander-connector-salesforce==0.3.1rc1` for Dander `0.7.x` compatibility.
+- Kept all four endpoints, plugin API v1, and connector runtime behavior unchanged.
+- Updated the lockfile to exercise the candidate against public Dander `0.7.0rc1`.
 
 ## Try It
 
-Install the built package outside the checkout, pin `0.3.0` in `dander.yaml`, and run
+Install the built package outside the checkout, pin `0.3.1rc1` in `dander.yaml`, and run
 `dander connector check salesforce` from a generated project with secret references configured.
 
 ## Checks
 
-- Live Accounts, Contacts, Opportunities, and Users ingestion succeeded with forced pagination.
-- Inclusive replay remained duplicate-free and cursors did not regress.
-- Create/update ingestion and soft-delete tombstones were verified through governed models/tests.
-- ServiceNow passed on the same source-free Dander image; schedules remained paused.
-- Ruff, formatting, strict typing, all 93 tests, package build, and external wheel discovery passed.
+- All 93 tests, Ruff lint/format, strict mypy, and package build passed.
+- The lock resolves `dander-platform==0.7.0rc1` with this candidate.
 
 ## Decisions
 
-- Stable `0.3.0` promotes the accepted candidate without a connector runtime change.
-- Write-back remains opt-in, explicitly confirmed, and experimental.
-- Salesforce hard-delete recovery remains a documented limitation.
+- Widen only the package compatibility boundary from Dander `<0.7` to `<0.8`.
+- Preserve plugin API v1 and all connector behavior.
 
 ## Remaining
 
-- Run the full protected checks, merge, tag, and publish `0.3.0`.
-- Pin the stable connector in Dander `0.6.0`.
-- Upgrade the retained project only through its separately reviewed plan.
+- Run protected checks, publish the candidate, and use it in the isolated portability proof.
+- Promote a stable patch only after that proof succeeds.
+- Leave the retained project unchanged until its separately reviewed upgrade.
 
 ## Review First
 
 - `CHANGELOG.md`
 - `pyproject.toml`
-- `README.md`
+- `uv.lock`

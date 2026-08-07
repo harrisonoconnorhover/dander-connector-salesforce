@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.1rc1 — 2026-08-07 (alpha)
+
+- Extend package compatibility through Dander `0.7.x` without changing connector runtime
+  behavior or plugin API v1.
+
 ## 0.3.0 — 2026-08-07 (alpha)
 
 - Promote the accepted four-endpoint Salesforce candidate without changing connector runtime
