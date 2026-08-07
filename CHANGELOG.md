@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.1 — 2026-08-07 (alpha)
+
+- Promote the accepted Dander 0.7 compatibility patch without connector runtime changes.
+- Complete source-free Dander `0.7.0rc2` ingest, replay, overlap, interruption-recovery, and
+  no-drift acceptance across Accounts, Contacts, Opportunities, and Users.
+
 ## 0.3.1rc1 — 2026-08-07 (alpha)
 
 - Extend package compatibility through Dander `0.7.x` without changing connector runtime

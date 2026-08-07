@@ -2,33 +2,31 @@
 
 ## Finished
 
-- Prepared `dander-connector-salesforce==0.3.1rc1` for Dander `0.7.x` compatibility.
+- Prepared stable `dander-connector-salesforce==0.3.1` from the accepted candidate.
 - Kept all four endpoints, plugin API v1, and connector runtime behavior unchanged.
-- Updated the lockfile to exercise the candidate against public Dander `0.7.0rc1`.
+- Updated only release metadata, the stable example pin, changelog, lockfile, and handoff.
 
 ## Try It
 
-Install the built package outside the checkout, pin `0.3.1rc1` in `dander.yaml`, and run
-`dander connector check salesforce` from a generated project with secret references configured.
+Install the built package outside the checkout and pin `0.3.1` in `dander.yaml`.
 
 ## Checks
 
-- All 93 tests, Ruff lint/format, strict mypy, and package build passed.
-- The lock resolves `dander-platform==0.7.0rc1` with this candidate.
+- Isolated Dander `0.7.0rc2` live acceptance passed across all four Salesforce endpoints.
+- All 93 tests, Ruff lint/format, strict mypy, and package build passed locally.
 
 ## Decisions
 
-- Widen only the package compatibility boundary from Dander `<0.7` to `<0.8`.
-- Preserve plugin API v1 and all connector behavior.
+- Promote the accepted candidate without a functional connector change.
+- Preserve plugin API v1 and the Dander `>=0.4,<0.8` compatibility range.
 
 ## Remaining
 
-- Run protected checks, publish the candidate, and use it in the isolated portability proof.
-- Promote a stable patch only after that proof succeeds.
-- Leave the retained project unchanged until its separately reviewed upgrade.
+- Merge through protected main, tag `v0.3.1`, and publish through the protected environment.
+- Verify the public package resolves with stable Dander `0.7.0` after its publication.
 
 ## Review First
 
 - `CHANGELOG.md`
 - `pyproject.toml`
-- `uv.lock`
+- `README.md`
