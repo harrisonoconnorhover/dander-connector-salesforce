@@ -29,14 +29,14 @@ window instead of silently presenting it as complete.
 
 ## Install and configure
 
-Declare the exact candidate version in `dander.yaml`:
+Declare the exact stable version in `dander.yaml`:
 
 ```yaml
 version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.3.0rc1
+    version: 0.3.0
 pipelines:
   salesforce_crm:
     source: salesforce

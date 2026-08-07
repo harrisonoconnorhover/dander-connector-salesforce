@@ -2,38 +2,38 @@
 
 ## Finished
 
-- Published `dander-connector-salesforce==0.3.0rc1` against public `dander-platform==0.6.0rc1`.
-- Deployed their source-free shared image to the isolated proof project with both schedules paused.
-- Proved live create, update/read-back, unique External ID upsert, delete, repeat-delete, and `get_deleted` against the disposable Salesforce org.
-- Completed a hosted `queryAll` graph run that retained both deleted proof Accounts as tombstones.
-- Left the retained project unchanged.
+- Prepared stable `dander-connector-salesforce==0.3.0` from the accepted `0.3.0rc1` runtime.
+- Kept the four Salesforce endpoints, plugin API v1, and `salesforce_bulk2` behavior unchanged.
+- Recorded the isolated hosted proof against public `dander-platform==0.6.0rc2`.
+- Left the retained project and Salesforce source code unchanged.
 
 ## Try It
 
-Install the exact candidates outside both repositories, then run `dander connector check salesforce`
-from a generated project with Salesforce secret references configured.
+Install the built package outside the checkout, pin `0.3.0` in `dander.yaml`, and run
+`dander connector check salesforce` from a generated project with secret references configured.
 
 ## Checks
 
-- Live connector check passed; create/update read-back and two-call upsert produced the expected state.
-- Both deletes returned `deleted`; the repeat returned `not_found`; the delayed deleted feed returned both IDs.
-- Hosted Salesforce run `651d73a3bc93496499ff6fbf8b1f58c2` succeeded with 3 extracted and 3 affected rows.
-- Both tombstones reached `raw.salesforce_accounts`; the graph target contained 16 rows.
-- Leases released, no staging tables remained, both schedules stayed paused, and Terraform reported `No changes.`
+- Live Accounts, Contacts, Opportunities, and Users ingestion succeeded with forced pagination.
+- Inclusive replay remained duplicate-free and cursors did not regress.
+- Create/update ingestion and soft-delete tombstones were verified through governed models/tests.
+- ServiceNow passed on the same source-free Dander image; schedules remained paused.
+- Ruff, formatting, strict typing, all 93 tests, package build, and external wheel discovery passed.
 
 ## Decisions
 
-- Keep `Dander_External_ID__c` in the disposable org for later acceptance; it is unique and External ID metadata-verified.
-- Keep write-back opt-in, explicitly confirmed, and single-attempt.
-- Treat the proof as isolated acceptance only; no retained-project migration occurred.
+- Stable `0.3.0` promotes the accepted candidate without a connector runtime change.
+- Write-back remains opt-in, explicitly confirmed, and experimental.
+- Salesforce hard-delete recovery remains a documented limitation.
 
 ## Remaining
 
-- Decide whether to promote the accepted Dander and Salesforce candidates to stable releases.
-- Migrate the retained project only through its separately reviewed plan and smoke sequence.
+- Run the full protected checks, merge, tag, and publish `0.3.0`.
+- Pin the stable connector in Dander `0.6.0`.
+- Upgrade the retained project only through its separately reviewed plan.
 
 ## Review First
 
-- `docs/live-writeback-acceptance.md`
-- `src/dander_connector_salesforce/source.py`
-- `tests/test_source.py`
+- `CHANGELOG.md`
+- `pyproject.toml`
+- `README.md`

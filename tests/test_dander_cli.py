@@ -37,7 +37,7 @@ version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.3.0rc1
+    version: 0.3.0
 pipelines:
   salesforce_accounts:
     source: salesforce

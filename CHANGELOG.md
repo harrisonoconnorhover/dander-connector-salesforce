@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-08-07 (alpha)
+
+- Promote the accepted four-endpoint Salesforce candidate without changing connector runtime
+  behavior.
+- Record successful source-free hosted ingestion, governed transforms/tests, inclusive replay,
+  soft-deletion tombstones, cleanup, and ServiceNow compatibility on Dander `0.6.0rc2`.
+
 ## 0.3.0rc1 — 2026-08-06 (alpha)
 
 - Expand the bounded Bulk API 2.0 connector to independently watermarked Accounts, Contacts,
