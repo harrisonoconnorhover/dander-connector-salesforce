@@ -300,6 +300,7 @@ def test_read_capabilities_are_structurally_discovered(
             ConnectorOperation.GET_DELETED,
             ConnectorOperation.GET_SINGLE_OBJECT,
             ConnectorOperation.TEST_CONNECTION,
+            ConnectorOperation.UPDATE,
         }
     )
 
@@ -651,3 +652,54 @@ def test_create_does_not_retry_ambiguous_transport_failure(
 
     assert len(client.requests) == 1
     assert auth.requests == 1
+
+
+def test_update_patches_one_record_and_returns_identity(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([{}])
+    source = SalesforceBulk2Source(config, auth, client=client)
+    identity = {"Id": "001000000000003AAA"}
+
+    assert source.update("accounts", identity, {"Name": "Updated Account"}) == identity
+    request = client.requests[0]
+    assert request.method == "PATCH"
+    assert request.url.path.endswith("/sobjects/Account/001000000000003AAA")
+    assert _request_body(request) == {"Name": "Updated Account"}
+    assert auth.requests == 1
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [{}, {"Other": "001000000000003AAA"}, {"Id": "invalid"}],
+)
+def test_update_rejects_invalid_identity_before_network(
+    config: SourceConfig,
+    auth: FakeAuth,
+    identity: dict[str, str],
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="identity field 'Id'|invalid Id"):
+        source.update("accounts", identity, {"Name": "Updated Account"})
+
+    assert client.requests == []
+
+
+def test_update_reuses_declared_field_validation(
+    config: SourceConfig,
+    auth: FakeAuth,
+) -> None:
+    client = FakeClient([])
+    source = SalesforceBulk2Source(config, auth, client=client)
+
+    with pytest.raises(EnterpriseSourceError, match="read-only"):
+        source.update(
+            "accounts",
+            {"Id": "001000000000003AAA"},
+            {"SystemModstamp": "2026-08-06T12:00:00Z"},
+        )
+
+    assert client.requests == []
