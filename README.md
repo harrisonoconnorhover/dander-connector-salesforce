@@ -27,6 +27,15 @@ this connector.
 Salesforce's deleted-record feed retains at most 15 days. Dander rejects a wider or non-forward
 window instead of silently presenting it as complete.
 
+## Dander compatibility
+
+This release supports `dander-platform>=0.6.0rc1,<0.10` through plugin API v1. Pin both
+packages exactly in deployments. CI installs the built connector wheel into a fresh environment
+and runs the complete connector test suite with Dander `0.6.0rc1`, `0.7.1`, and `0.9.0rc20`.
+The normal development lock uses stable Dander `0.7.1`; release candidates must be selected
+explicitly. These checks use synthetic data and do not certify every Salesforce
+configuration.
+
 ## Install and configure
 
 Declare the exact stable version in `dander.yaml`:
@@ -36,7 +45,7 @@ version: 1
 plugins:
   salesforce:
     distribution: dander-connector-salesforce
-    version: 0.3.1
+    version: 0.3.2
 pipelines:
   salesforce_crm:
     source: salesforce
@@ -79,7 +88,7 @@ field. Custom fields are opt-in: add each field to both the endpoint's SOQL `SEL
 - Explicit writes: create, update, and delete by validated Salesforce `Id`
 - Connection check: authenticated REST `/limits` probe that returns no business records
 
-With Dander `0.5.0` or newer, inspect and check an installed pipeline without ingestion:
+With a supported Dander version, inspect and check an installed pipeline without ingestion:
 
 ```console
 dander connector inspect salesforce_crm
@@ -120,8 +129,8 @@ Before each upsert, the connector checks Salesforce metadata and refuses fields 
 both External ID and Unique. External-ID values are encoded as one URL path segment. The local
 control field is not sent in Bulk query job bodies.
 
-These write capabilities require public `dander-platform>=0.6.0rc1,<0.7`. Provider writes remain
-explicit CLI operations and are not invoked by normal scheduled ingestion.
+These write capabilities use the same Dander compatibility range as the package. Provider writes
+remain explicit CLI operations and are not invoked by normal scheduled ingestion.
 
 ## Development
 
