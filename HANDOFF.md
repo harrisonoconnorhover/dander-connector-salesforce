@@ -2,31 +2,36 @@
 
 ## Finished
 
-- Prepared stable `dander-connector-salesforce==0.3.1` from the accepted candidate.
-- Kept all four endpoints, plugin API v1, and connector runtime behavior unchanged.
-- Updated only release metadata, the stable example pin, changelog, lockfile, and handoff.
+- Prepared `dander-connector-salesforce==0.3.2` for Dander through `0.9.x`.
+- Preserved plugin API v1 and existing connector runtime behavior.
+- Added clean wheel behavior checks to the required distribution job and corrected package docs.
 
 ## Try It
 
-Install the built package outside the checkout and pin `0.3.1` in `dander.yaml`.
+Pin Dander and connector versions exactly, then run `dander plugins install` using the README
+manifest. For development, run `uv sync --frozen --extra dev` and `uv run pytest`.
 
 ## Checks
 
-- Isolated Dander `0.7.0rc2` live acceptance passed across all four Salesforce endpoints.
-- All 93 tests, Ruff lint/format, strict mypy, and package build passed locally.
+- Ruff lint/format and strict mypy passed.
+- 93 tests passed on the locked stable Dander `0.7.1` environment.
+- Fresh wheel installs passed all 93 tests with Dander `0.6.0rc1` and `0.7.1`.
+- Fresh wheel installs also passed all 93 tests with public `0.9.0rc20` and the current
+  `0.9.0rc32` wheel built from Dander `3bd09301e7becd27792ed7091bdb691edcd9601b`.
+- Updated production dependencies passed `pip-audit --strict` with no known vulnerabilities.
 
 ## Decisions
 
-- Promote the accepted candidate without a functional connector change.
-- Preserve plugin API v1 and the Dander `>=0.4,<0.8` compatibility range.
+- Preserve the existing Dander minimum `0.6.0rc1` and extend only the upper bound to `<0.10`.
+- Verify compatibility with existing synthetic tests; no live-provider calls were made.
 
 ## Remaining
 
-- Merge through protected main, tag `v0.3.1`, and publish through the protected environment.
-- Verify the public package resolves with stable Dander `0.7.0` after its publication.
+- Add and verify the coordinated immutable Dander `0.9.0rc33` release wheel.
+- Merge through protected main and verify exact-main CI.
+- Coordinate the immutable Dander release, then tag and publish through the existing workflow.
 
 ## Review First
 
-- `CHANGELOG.md`
-- `pyproject.toml`
-- `README.md`
+- `pyproject.toml` and `README.md`
+- `.github/workflows/ci.yml`

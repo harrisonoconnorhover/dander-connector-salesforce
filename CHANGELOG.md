@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 — 2026-10-01 (alpha)
+
+- Extend package compatibility through Dander `0.9.x` while preserving the existing minimum
+  version and plugin API v1. Connector runtime behavior is unchanged.
+- Run the full connector test suite against clean wheel installs on the minimum Dander version,
+  stable `0.7.1`, and public `0.9.0rc20` in the required distribution check.
+- Refresh the development lock and correct outdated compatibility and installation guidance.
+
 ## Unreleased
 
 ## 0.3.1 — 2026-08-07 (alpha)
