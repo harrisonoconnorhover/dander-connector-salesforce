@@ -27,9 +27,9 @@ manifest. For development, run `uv sync --frozen --extra dev` and `uv run pytest
 
 ## Remaining
 
-- Add and verify the coordinated immutable Dander `0.9.0rc33` release wheel.
+- Verify the coordinated Dander `0.9.0rc33` release wheel after publication as the final integration check.
 - Merge through protected main and verify exact-main CI.
-- Coordinate the immutable Dander release, then tag and publish through the existing workflow.
+- Tag and publish through the existing workflow so the next Dander catalog can select this version.
 
 ## Review First
 
